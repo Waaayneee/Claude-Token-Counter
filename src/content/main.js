@@ -192,7 +192,7 @@
 		applyUsageUpdate(parsed, 'usage');
 	}
 
-	async async function refreshConversation() {
+	async function refreshConversation() {
 		// Fetch the current conversation's message tree and compute token metrics.
 		// This is separate from org usage because it only counts the active chat context.
 		await bridgeReady;
