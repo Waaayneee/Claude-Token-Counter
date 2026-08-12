@@ -1,6 +1,9 @@
 (() => {
 	'use strict';
 
+	// Bridge client used inside the content script.
+	// Sends requests to the injected page script and receives events like
+	// conversation data, generation start, and message_limit updates.
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
 	function getRuntime() {
@@ -46,7 +49,7 @@
 		}
 
 		on(type, fn) {
-			if (!this._listeners.has(type)) this._listeners.set(type, new Set());
+		// Register a listener for bridge events such as conversation data or message_limit.
 			this._listeners.get(type).add(fn);
 			return () => this._listeners.get(type)?.delete(fn);
 		}

@@ -3,37 +3,48 @@
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
+	// This file builds and updates the visible token/usage UI elements
+	// shown inside claude.ai.
+	//
+	// Key responsibilities:
+	// - display the current conversation token count and progress bar
+	// - show the 5-hour session usage bar and reset countdown
+	// - update the bar fill color/graphics based on warning/full levels
+	// - attach hover tooltips for explanatory popup text
+
 	function formatSeconds(totalSeconds) {
+		// Format a countdown in the simple mm:ss form for cached output timers.
 		const minutes = Math.floor(totalSeconds / 60);
 		const seconds = totalSeconds % 60;
 		return `${minutes}:${String(seconds).padStart(2, '0')}`;
 	}
 
 	function formatResetCountdown(timestampMs) {
-		// <= 0: reset time reached
+		// Convert an absolute reset timestamp into a user-friendly countdown string.
+		// This is used for session/weekly reset text like "resets in 4h 20m".
 		const diffMs = timestampMs - Date.now();
 		if (diffMs <= 0) return '0s';
 
-		// < 1 min: show seconds
 		const totalSeconds = Math.floor(diffMs / 1000);
 		if (totalSeconds < 60) return `${totalSeconds}s`;
 
-		// < 1 hour: show minutes
 		const totalMinutes = Math.round(totalSeconds / 60);
 		if (totalMinutes < 60) return `${totalMinutes}m`;
 
-		// < 1 day: show hours
 		const hours = Math.floor(totalMinutes / 60);
 		const minutes = totalMinutes % 60;
 		if (hours < 24) return `${hours}h ${minutes}m`;
 
-		// >= 1 day: show days
 		const days = Math.floor(hours / 24);
 		const remHours = hours % 24;
 		return `${days}d ${remHours}h`;
 	}
 
 	function setupTooltip(element, tooltip, { topOffset = 10 } = {}) {
+		// Attach a hover/touch tooltip to the given element.
+		// The tooltip is positioned relative to the target element,
+		// fades in on hover, and fades out when the pointer leaves.
+		// This is the popup text that explains the window and usage bars.
 		if (!element || !tooltip) return;
 		if (element.hasAttribute('data-tooltip-setup')) return;
 		element.setAttribute('data-tooltip-setup', 'true');
@@ -89,6 +100,8 @@
 	}
 
 	function makeTooltip(text) {
+		// Create a tooltip element that will be shown on hover.
+		// The content is plain text and the element is appended to <body>.
 		const tip = document.createElement('div');
 		tip.className = 'bg-bg-500 text-text-000 cc-tooltip';
 		tip.textContent = text;
@@ -143,7 +156,8 @@
 		}
 
 		refreshProgressChrome() {
-			const { strokeColor, fillColor, markerColor } = this.getProgressChrome();
+		// Refresh the CSS colors used by the mini token bar and session/weekly bars.
+		// The values change automatically with the current page theme.
 
 			const applyBarChrome = (bar, { fillWarn } = {}) => {
 				if (!bar) return;
@@ -224,9 +238,8 @@
 			this.sessionUsageSpan = document.createElement('span');
 			this.sessionUsageSpan.className = 'cc-usageText';
 
-			this.sessionBar = document.createElement('div');
-			this.sessionBar.className = 'cc-bar cc-bar--usage';
-			this.sessionBarFill = document.createElement('div');
+		// Session usage bar: filled width represents the percent of the 5-hour window used.
+		// The marker shows where the current time lies inside the window.
 			this.sessionBarFill.className = 'cc-bar__fill';
 			this.sessionMarker = document.createElement('div');
 			this.sessionMarker.className = 'cc-bar__marker cc-hidden';
@@ -368,6 +381,9 @@
 		}
 
 		setConversationMetrics({ totalTokens, cachedUntil } = {}) {
+			// Render the in-chat token counter display for the current conversation.
+			// This shows how many tokens are already in the current Claude context,
+			// and uses the fixed context limit to compute the percent used.
 			this.pendingCache = false;
 
 			if (typeof totalTokens !== 'number') {
@@ -379,6 +395,8 @@
 			}
 
 			const pct = Math.max(0, Math.min(100, (totalTokens / CC.CONST.CONTEXT_LIMIT_TOKENS) * 100));
+			// Context percent is based on the fixed max tokens allowed in Claude context.
+			// This number is approximate because the tokenizer can differ from Claude's.
 			this.lengthDisplay.textContent = `~${totalTokens.toLocaleString()} tokens`;
 
 			// Mini bar (hide when full - context is definitely compacted by then)
@@ -453,6 +471,8 @@
 		}
 
 		setUsage(usage) {
+			// Update the visible usage bars for the 5-hour session and 7-day window.
+			// `usage` is normalized from the Claude API or SSE message_limit events.
 			this.refreshProgressChrome();
 			const session = usage?.five_hour || null;
 			const weekly = usage?.seven_day || null;
@@ -464,12 +484,16 @@
 				const rawPct = session.utilization;
 				const pct = Math.round(rawPct * 10) / 10;
 				this.sessionResetMs = session.resets_at ? Date.parse(session.resets_at) : null;
+				// Store the start of the 5-hour window so the marker can show elapsed time.
 				this.sessionWindowStartMs = this.sessionResetMs ? this.sessionResetMs - 5 * 60 * 60 * 1000 : null;
 				const resetText = this.sessionResetMs ? ` · resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
+				// Display the percentage plus the live reset countdown text.
 				this.sessionUsageSpan.textContent = `Session: ${pct}%${resetText}`;
 
 				const width = Math.max(0, Math.min(100, rawPct));
+				// Fill the bar based on the raw session utilization percent.
 				this.sessionBarFill.style.width = `${width}%`;
+				// Change bar appearance for warning/full thresholds.
 				this.sessionBarFill.classList.toggle('cc-warn', width >= 90);
 				this.sessionBarFill.classList.toggle('cc-full', width >= 99.5);
 			} else {
@@ -518,6 +542,7 @@
 				const elapsed = Math.max(0, Math.min(total, now - this.sessionWindowStartMs));
 				const ratio = total > 0 ? elapsed / total : 0;
 				const pct = Math.max(0, Math.min(100, ratio * 100));
+				// Marker position shows how far through the 5-hour window the current time is.
 				this.sessionMarker.classList.remove('cc-hidden');
 				this.sessionMarker.style.left = `${pct}%`;
 			} else if (this.sessionMarker) {

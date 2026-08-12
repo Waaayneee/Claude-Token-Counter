@@ -1,6 +1,9 @@
 (() => {
 	'use strict';
 
+	// Injected bridge script that runs inside the page context.
+	// It intercepts fetch calls and history navigation to detect usage events,
+	// conversation data loads, and generation start signals.
 	const CC_MARKER = 'ClaudeCounter';
 
 	// Capture original fetch before anyone else can wrap it
@@ -26,7 +29,7 @@
 		const url = toAbsoluteUrl(args[0]);
 		const opts = args[1] || {};
 
-		// Detect generation start (completion requests)
+		// Detect generation start (completion requests) so the UI can mark cached tokens invalid.
 		if (url && opts.method === 'POST' && (url.includes('/completion') || url.includes('/retry_completion'))) {
 			post('cc:generation_start', {});
 		}
@@ -94,6 +97,8 @@
 	}
 
 	async function handleEventStream(response) {
+		// Read an SSE response body to extract live Claude event messages.
+		// We specifically look for message_limit events that carry usage updates.
 		try {
 			const cloned = response.clone();
 			const reader = cloned.body?.getReader?.();

@@ -12,6 +12,9 @@
 (() => {
 	'use strict';
 
+	// Userscript wrapper for the extension logic in the standalone userscript version.
+	// It detects SPA navigation and listens for event-stream updates so the same
+	// usage and token counting UI can work in the userscript environment.
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 	if (CC.__ccUserscriptWrapped) return;
 	CC.__ccUserscriptWrapped = true;
@@ -50,6 +53,8 @@
 
 	window.addEventListener('popstate', dispatchUrlChange);
 
+	// Watch for fetch requests in the page so we can intercept Claude events
+	// and update the token/usage UI in the userscript environment.
 	if (originalFetch) {
 		window.fetch = async (...args) => {
 			const url = toAbsoluteUrl(args[0]);
