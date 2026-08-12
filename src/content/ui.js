@@ -289,33 +289,34 @@
 		}
 
 		_setupTooltips() {
-			this.lengthTooltip = makeTooltip(
-				"Approximate tokens (excludes system prompt).\nUses a generic tokenizer, may differ from Claude's count.\nBecomes invalid after context compaction.\nBar scale: 200k tokens (Claude's maximum context length, will compact before then)."
-			);
-			setupTooltip(
-				this.lengthGroup,
-				this.lengthTooltip,
-				{ topOffset: 8 }
-			);
+				this.lengthTooltip = makeTooltip(
+					"Approximate tokens (excludes system prompt).\nUses a generic tokenizer, may differ from Claude's count.\nBecomes invalid after context compaction.\nBar scale: 200k tokens (Claude's maximum context length, will compact before then)."
+				);
+				setupTooltip(this.lengthGroup, this.lengthTooltip, { topOffset: 8 });
 
-			setupTooltip(
-				this.cachedDisplay,
-				makeTooltip("Messages sent while cached are significantly cheaper."),
-				{ topOffset: 8 }
-			);
+				setupTooltip(
+					this.cachedDisplay,
+					makeTooltip("Messages sent while cached are significantly cheaper."),
+					{ topOffset: 8 }
+				);
 
-			setupTooltip(
-				this.sessionGroup,
-				makeTooltip("5-hour session window.\nThe bar shows your usage.\nThe line marks where you are in the window."),
-				{ topOffset: 8 }
-			);
+				this.sessionTooltip = makeTooltip(
+					"5-hour session window.\nThe bar shows your usage.\nThe line marks where you are in the window."
+				);
+				setupTooltip(this.sessionGroup, this.sessionTooltip, { topOffset: 8 });
 
-			setupTooltip(
-				this.weeklyGroup,
-				makeTooltip("7-day usage window.\nThe bar shows your usage.\nThe line marks where you are in the window."),
-				{ topOffset: 8 }
-			);
-		}
+				this.weeklyTooltip = makeTooltip(
+					"7-day usage window.\nThe bar shows your usage.\nThe line marks where you are in the window."
+				);
+				setupTooltip(this.weeklyGroup, this.weeklyTooltip, { topOffset: 8 });
+			}
+
+			_formatEstimatedTokenLine(rawPct) {
+				const limit = CC.CONST.SESSION_TOKEN_LIMIT_ESTIMATE;
+				const usedTokens = Math.round((rawPct / 100) * limit);
+				return `~${usedTokens.toLocaleString()} / ${limit.toLocaleString()} tokens (estimate)`;
+			}
+		
 
 		attach() {
 			this.attachHeader();
@@ -496,12 +497,22 @@
 				// Change bar appearance for warning/full thresholds.
 				this.sessionBarFill.classList.toggle('cc-warn', width >= 90);
 				this.sessionBarFill.classList.toggle('cc-full', width >= 99.5);
+				// Update the tooltip text to include the estimated token count for the session.
+				if (this.sessionTooltip) {
+					this.sessionTooltip.textContent =
+						`5-hour session window.\nThe bar shows your usage.\nThe line marks where you are in the window.\nim ngl this is a really bad estimate btw im eyeballing ts\n${this._formatEstimatedTokenLine(rawPct)}`;
+				}
 			} else {
 				this.sessionUsageSpan.textContent = '';
 				this.sessionBarFill.style.width = '0%';
 				this.sessionBarFill.classList.remove('cc-warn', 'cc-full');
 				this.sessionResetMs = null;
 				this.sessionWindowStartMs = null;
+				// Reset the tooltip text to the default explanation. JIC it doesnt work or sum
+				if (this.sessionTooltip) {
+					this.sessionTooltip.textContent =
+						'5-hour session window.\nThe bar shows your usage.\nThe line marks where you are in the window.';
+				}
 			}
 
 			const hasWeekly = weekly && typeof weekly.utilization === 'number';
