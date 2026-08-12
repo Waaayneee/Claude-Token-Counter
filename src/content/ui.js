@@ -240,6 +240,9 @@
 
 		// Session usage bar: filled width represents the percent of the 5-hour window used.
 		// The marker shows where the current time lies inside the window.
+			this.sessionBar = document.createElement('div');
+			this.sessionBar.className = 'cc-bar cc-bar--usage';
+			this.sessionBarFill = document.createElement('div');
 			this.sessionBarFill.className = 'cc-bar__fill';
 			this.sessionMarker = document.createElement('div');
 			this.sessionMarker.className = 'cc-bar__marker cc-hidden';
