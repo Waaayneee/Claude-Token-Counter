@@ -159,6 +159,8 @@
 		// Refresh the CSS colors used by the mini token bar and session/weekly bars.
 		// The values change automatically with the current page theme.
 
+			const { strokeColor, fillColor, markerColor } = this.getProgressChrome();
+
 			const applyBarChrome = (bar, { fillWarn } = {}) => {
 				if (!bar) return;
 				bar.style.setProperty('--cc-stroke', strokeColor);
@@ -168,9 +170,7 @@
 			};
 
 			applyBarChrome(this.lengthBar, { fillWarn: fillColor });
-			applyBarChrome(this.sessionBar, { fillWarn: CC.COLORS.RED_WARNING });
-			applyBarChrome(this.weeklyBar, { fillWarn: CC.COLORS.RED_WARNING });
-		}
+			}
 
 		initialize() {
 			// Header container (tokens + cache timer)
