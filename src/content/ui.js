@@ -290,13 +290,14 @@
 				makeTooltip("Messages sent while cached are significantly cheaper."),
 				{ topOffset: 8 }
 			);
-
+			
+			this.sessionTooltip = makeTooltip('Loading session usage...');
 			setupTooltip(
 				this.sessionGroup,
-				makeTooltip("5-hour session window.\nThe bar shows your usage.\nThe line marks where you are in the window."),
+				this.sessionTooltip,
 				{ topOffset: 8 }
 			);
-
+			
 			setupTooltip(
 				this.weeklyGroup,
 				makeTooltip("7-day usage window.\nThe bar shows your usage.\nThe line marks where you are in the window."),
@@ -377,8 +378,10 @@
 				this._renderHeader();
 				return;
 			}
-
+			//this line of code is to calculate the percentage of total tokens used relative to the context limit and update the display accordingly
+			//first line calculates the percentage of total tokens used relative to the context limit, ensuring it is between 0 and 100. 
 			const pct = Math.max(0, Math.min(100, (totalTokens / CC.CONST.CONTEXT_LIMIT_TOKENS) * 100));
+			//The second line updates the length display to show the approximate number of tokens used, formatted with commas for readability.
 			this.lengthDisplay.textContent = `~${totalTokens.toLocaleString()} tokens`;
 
 			// Mini bar (hide when full - context is definitely compacted by then)
@@ -466,7 +469,14 @@
 				this.sessionResetMs = session.resets_at ? Date.parse(session.resets_at) : null;
 				this.sessionWindowStartMs = this.sessionResetMs ? this.sessionResetMs - 5 * 60 * 60 * 1000 : null;
 				const resetText = this.sessionResetMs ? ` · resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
-				this.sessionUsageSpan.textContent = `Session: ${pct}%${resetText}`;
+				this.sessionUsageSpan.textContent = `Session: ${pct}%${resetText}`; //session percentage usage display
+				
+				//Calculation for the estimated tokens used.
+				const estimatedTokensUsed = Math.round((rawPct/100) * CC.CONST.CONTEXT_LIMIT_TOKENS);
+				//Update the tooltip text to show the estimated tokens used and the context limit.
+				if (this.sessionTooltip) {
+					this.sessionTooltip.textContent = `5-hour usage Window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
+				}
 
 				const width = Math.max(0, Math.min(100, rawPct));
 				this.sessionBarFill.style.width = `${width}%`;
