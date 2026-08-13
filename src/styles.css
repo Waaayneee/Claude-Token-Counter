@@ -43,7 +43,7 @@
 
 /* Bars (mini + usage) */
 .cc-bar {
-	--cc-radius: 3px;
+	--cc-radius: 999px;
 	--cc-stroke: transparent;
 	--cc-fill: transparent;
 	--cc-fill-warn: var(--cc-fill);
@@ -66,8 +66,8 @@
 	transition: width 300ms ease, background-color 300ms ease;
 	border-top-left-radius: max(0px, calc(var(--cc-radius) - 1px));
 	border-bottom-left-radius: max(0px, calc(var(--cc-radius) - 1px));
-	border-top-right-radius: 0;
-	border-bottom-right-radius: 0;
+	border-top-right-radius: max(0px, calc(var(--cc-radius) - 1px));
+	border-bottom-right-radius: max(0px, calc(var(--cc-radius) - 1px));
 }
 
 .cc-bar__fill.cc-full {
