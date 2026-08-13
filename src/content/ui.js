@@ -96,7 +96,7 @@
 		return tip;
 	}
 
-	function makeInteractiveTooltip(onToggle) {
+	function makeInteractiveTooltip() {
 		const tip = document.createElement('div');
 		tip.className = 'bg-bg-500 text-text-000 cc-tooltip cc-tooltip--interactive';
 		
@@ -115,13 +115,6 @@
 		const toggleKnob = document.createElement('div');
 		toggleKnob.className = 'cc-toggle-switch__knob';
 		toggle.appendChild(toggleKnob);
-		
-		toggle.addEventListener('click', (e) => {
-			e.stopPropagation();
-			toggle.classList.toggle('cc-toggle-switch--on');
-			const isOn = toggle.classList.contains('cc-toggle-switch--on');
-			onToggle(isOn);
-		});
 		
 		container.appendChild(label);
 		container.appendChild(toggle);
@@ -287,7 +280,8 @@
 			// SVG ICON START - Bell icon for notification settings
 			this.notificationBell.innerHTML = `
 				<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-					<path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z">
+					<path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z
+">
 				</svg>
 			`;
 			// SVG ICON END
@@ -380,12 +374,7 @@
 
 			// Setup notification bell interactive tooltip
 			if (this.notificationBell) {
-				const { tip, toggle } = makeInteractiveTooltip((enabled) => {
-					this._saveNotificationPreference(enabled);
-					if (enabled && Notification.permission === 'default') {
-						Notification.requestPermission();
-					}
-				});
+				const { tip, toggle } = makeInteractiveTooltip();
 
 				this.notificationTooltip = tip;
 				this.notificationToggle = toggle;
@@ -397,6 +386,45 @@
 
 				let tooltipVisible = false;
 				let hideTimeout = null;
+				let permissionDialogPending = false; // Track if permission dialog is open
+
+				// Toggle click handler with permission check
+				this.notificationToggle.addEventListener('click', async (e) => {
+					e.stopPropagation();
+
+					// If trying to turn ON, check/request permission FIRST before flipping the switch
+					if (!this.notificationsEnabled) {
+						if (typeof Notification === 'undefined') return; // browser doesn't support notifications at all
+
+						let permission = Notification.permission;
+
+						// Only prompt if the user hasn't already decided (default state)
+						if (permission === 'default') {
+							// Mark that we're waiting for user permission
+							permissionDialogPending = true;
+							permission = await Notification.requestPermission();
+							// Permission dialog closed, now we can hide the tooltip after a brief pause
+							permissionDialogPending = false;
+							hideTimeout = setTimeout(hide, 1600);
+						}
+
+						// Only turn the switch on if permission was actually granted
+						if (permission !== 'granted') {
+							this.notificationsEnabled = false;
+							this._saveNotificationPreference(false);
+							this.notificationToggle.classList.remove('cc-toggle-switch--on');
+							return; // Stop here, denied or dismissed, switch stays off
+						}
+
+						this.notificationsEnabled = true;
+					} else {
+						// Turning OFF never needs permission, always allowed
+						this.notificationsEnabled = false;
+					}
+
+					this._saveNotificationPreference(this.notificationsEnabled);
+					this.notificationToggle.classList.toggle('cc-toggle-switch--on', this.notificationsEnabled);
+				});
 
 				const show = () => {
 					if (tooltipVisible) return;
@@ -421,10 +449,14 @@
 				};
 
 				const hide = () => {
+					// Don't hide while permission dialog is open
+					if (permissionDialogPending) return;
+					
 					tooltipVisible = false;
 					this.notificationTooltip.style.opacity = '0';
 					this.notificationTooltip.style.pointerEvents = 'none';
 				};
+
 
 				this.notificationBell.addEventListener('pointerenter', (e) => {
 					if (e.pointerType === 'mouse') show();
@@ -432,7 +464,7 @@
 
 				this.notificationBell.addEventListener('pointerleave', (e) => {
 					if (e.pointerType === 'mouse') {
-						hideTimeout = setTimeout(hide, 200);
+						hideTimeout = setTimeout(hide, 1600);
 					}
 				});
 
@@ -441,7 +473,7 @@
 				});
 
 				this.notificationTooltip.addEventListener('pointerleave', () => {
-					hideTimeout = setTimeout(hide, 200);
+					hideTimeout = setTimeout(hide, 1600);
 				});
 			}
 		}
