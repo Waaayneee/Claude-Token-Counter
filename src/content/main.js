@@ -1,9 +1,6 @@
 (() => {
 	'use strict';
 
-	// Main controller for the Claude Counter UI.
-	// This file connects the browser bridge, session/weekly usage API, and
-	// conversation token metrics to the visible bars and labels in the page.
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 	if (CC.__started) return;
 	CC.__started = true;
@@ -62,9 +59,6 @@
 	CC.waitForElement = waitForElement;
 
 	function observeUrlChanges(callback) {
-		// Detect navigation in Claude's single-page app.
-		// The page changes URL with history API calls and popstate events,
-		// so we watch both to refresh the counters when the user switches chats.
 		let lastPath = window.location.pathname;
 
 		const fireIfChanged = () => {
@@ -87,9 +81,6 @@
 	}
 
 	function parseUsageFromUsageEndpoint(raw) {
-		// Normalize the org-level usage response from Claude's /usage endpoint.
-		// The 5-hour window and 7-day window are both parsed here.
-		// `utilization` is expected as a percentage (0-100) already.
 		if (!raw || typeof raw !== 'object') return null;
 
 		const normalizeWindow = (w, hours) => {
@@ -108,8 +99,6 @@
 	}
 
 	function parseUsageFromMessageLimit(raw) {
-		// Normalize the real-time SSE message_limit payload from Claude.
-		// This payload uses utilization as a decimal fraction, so multiply by 100.
 		if (!raw?.windows || typeof raw.windows !== 'object') return null;
 
 		const normalizeWindow = (w, hours) => {
@@ -150,14 +139,12 @@
 	const bridgeReady = CC.injectBridgeOnce();
 
 	function applyUsageUpdate(normalized, source) {
-		// Apply a fresh usage snapshot to the UI.
-		// `normalized` contains both 5-hour and 7-day utilization values.
 		if (!normalized) return;
 		const now = Date.now();
 		usageState = normalized;
 		lastUsageUpdateMs = now;
 		if (source === 'sse') lastUsageSseMs = now;
-		// Cache parsed timestamps to avoid Date.parse() every tick when updating labels.
+		// Cache parsed timestamps to avoid Date.parse() every tick
 		usageResetMs.five_hour = normalized.five_hour?.resets_at ? Date.parse(normalized.five_hour.resets_at) : null;
 		usageResetMs.seven_day = normalized.seven_day?.resets_at ? Date.parse(normalized.seven_day.resets_at) : null;
 		ui.setUsage(normalized);
@@ -170,8 +157,6 @@
 	}
 
 	async function refreshUsage() {
-		// Fetch the org-level usage snapshot from Claude's /usage endpoint.
-		// The 5-hour session bar and 7-day weekly bar are both derived from this.
 		await bridgeReady;
 		const orgId = currentOrgId || getOrgIdFromCookie();
 		if (!orgId) return;
@@ -193,8 +178,6 @@
 	}
 
 	async function refreshConversation() {
-		// Fetch the current conversation's message tree and compute token metrics.
-		// This is separate from org usage because it only counts the active chat context.
 		await bridgeReady;
 		if (!currentConversationId) {
 			ui.setConversationMetrics();
@@ -213,15 +196,11 @@
 	}
 
 	function handleGenerationStart() {
-		// When a new Claude generation begins, the previous token cache becomes stale.
-		// This sets a pending state so the UI can show that cached token info may update.
 		if (!currentConversationId) return;
 		ui.setPendingCache(true);
 	}
 
 	async function handleConversationPayload({ orgId, conversationId, data }) {
-		// Receive the conversation tree payload from the injected bridge.
-		// This is the raw data used to compute the token count for the current chat.
 		if (!conversationId || conversationId !== currentConversationId) return;
 		updateOrgIdIfNeeded(orgId);
 		if (!data) return;
@@ -231,8 +210,6 @@
 	}
 
 	function handleMessageLimit(messageLimit) {
-		// Handle real-time message_limit SSE updates from Claude.
-		// These updates provide live session/weekly utilization percentages.
 		const parsed = parseUsageFromMessageLimit(messageLimit);
 		applyUsageUpdate(parsed, 'sse');
 	}
@@ -242,8 +219,6 @@
 	CC.bridge.on('cc:message_limit', handleMessageLimit);
 
 	async function handleUrlChange() {
-		// Called whenever the user navigates to a new conversation or page.
-		// It reattaches the UI and refreshes both conversation token metrics and usage data.
 		currentConversationId = getConversationId();
 
 		// Attach usage line and header independently - they have different anchor elements

@@ -30,14 +30,10 @@
 	}
 
 	function getTokenizer() {
-		// Return the GPT tokenizer imported from the external tokenizer bundle.
-		// This tokenizer approximates Claude's tokenization for the current text.
 		return globalThis.GPTTokenizer_o200k_base || null;
 	}
 
 	function countTokens(text) {
-		// Count tokens in a string using the tokenizer.
-		// If the tokenizer is unavailable, fall back to zero.
 		if (!text) return 0;
 		const tokenizer = getTokenizer();
 		if (!tokenizer?.countTokens) return 0;
@@ -49,8 +45,6 @@
 	}
 
 	function buildTrunk(conversation) {
-		// Walk the current conversation tree from the leaf message backwards.
-		// This captures only the active message trunk used in the current chat context.
 		const messages = Array.isArray(conversation?.chat_messages) ? conversation.chat_messages : [];
 		const byId = new Map();
 		for (const msg of messages) {
@@ -183,10 +177,6 @@
 	const tokenCache = new TokenCache();
 
 	async function computeConversationMetrics(conversation) {
-		// Compute the full token count of the current conversation trunk.
-		// This walks the active message chain and counts only the relevant
-		// content items, ignoring thinking blobs and attachments that don't
-		// contribute to Claude's token usage.
 		const trunk = buildTrunk(conversation);
 		const trunkIds = trunk.map((m) => m.uuid).filter(Boolean);
 		tokenCache.pruneToMessageIds(trunkIds);
