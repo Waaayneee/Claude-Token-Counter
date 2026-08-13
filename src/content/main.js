@@ -130,6 +130,10 @@
 
 	const ui = new CC.ui.CounterUI({
 		onUsageRefresh: async () => {
+			// ask for notification permission if not already granted or denied
+			if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+				Notification.requestPermission();
+			}
 			await refreshUsage();
 		}
 	});
@@ -137,6 +141,32 @@
 
 	// Bridge must be ready before we can make requests
 	const bridgeReady = CC.injectBridgeOnce();
+
+	function sendNotification(title, options = {}) {
+		// Only send if notifications are enabled
+		if (!ui.notificationsEnabled) return;
+		
+		// Check if browser supports Notification API
+		if (!('Notification' in window)) return;
+
+		try {
+			// Request permission if not already granted
+			if (Notification.permission === 'default') {
+				Notification.requestPermission();
+				return; // Don't send yet, wait for user permission
+			}
+
+			if (Notification.permission === 'granted') {
+				// Send browser notification
+				new Notification(title, {
+					icon: '/icons/icon-128.png', // Adjust path if needed
+					...options
+				});
+			}
+		} catch (error) {
+			// Silently fail if notification fails
+		}
+	}
 
 	function applyUsageUpdate(normalized, source) {
 		if (!normalized) return;
@@ -296,10 +326,18 @@
 
 		if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
 			rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
+			// TODO: ADD NOTIFICATION FEATURE HERE - Notify user that 5-hour usage window has reset
+			sendNotification('5-hour usage window reset', {
+				body: 'Your Claude usage window has reset. You can now make new requests.'
+			});
 			refreshUsage();
 		}
 		if (usageResetMs.seven_day && now >= usageResetMs.seven_day && rolloverHandledForResetMs.seven_day !== usageResetMs.seven_day) {
 			rolloverHandledForResetMs.seven_day = usageResetMs.seven_day;
+			// TODO: ADD NOTIFICATION FEATURE HERE - Notify user that 7-day usage window has reset
+			sendNotification('7-day usage window reset', {
+				body: 'Your 7-day usage window has reset. You can now make new requests.'
+			});
 			refreshUsage();
 		}
 

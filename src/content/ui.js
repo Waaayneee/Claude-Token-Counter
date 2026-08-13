@@ -96,6 +96,41 @@
 		return tip;
 	}
 
+	function makeInteractiveTooltip(onToggle) {
+		const tip = document.createElement('div');
+		tip.className = 'bg-bg-500 text-text-000 cc-tooltip cc-tooltip--interactive';
+		
+		const container = document.createElement('div');
+		container.className = 'cc-tooltip-row';
+		
+		const label = document.createElement('div');
+		label.className = 'cc-tooltip-label';
+		label.textContent = 'Notifications';
+		
+		// Apple-style toggle switch
+		const toggle = document.createElement('button');
+		toggle.className = 'cc-toggle-switch';
+		toggle.setAttribute('aria-label', 'Toggle notifications');
+		
+		const toggleKnob = document.createElement('div');
+		toggleKnob.className = 'cc-toggle-switch__knob';
+		toggle.appendChild(toggleKnob);
+		
+		toggle.addEventListener('click', (e) => {
+			e.stopPropagation();
+			toggle.classList.toggle('cc-toggle-switch--on');
+			const isOn = toggle.classList.contains('cc-toggle-switch--on');
+			onToggle(isOn);
+		});
+		
+		container.appendChild(label);
+		container.appendChild(toggle);
+		tip.appendChild(container);
+		document.body.appendChild(tip);
+		
+		return { tip, toggle };
+	}
+
 	class CounterUI {
 		constructor({ onUsageRefresh } = {}) {
 			this.onUsageRefresh = onUsageRefresh || null;
@@ -125,7 +160,31 @@
 			this.weeklyWindowStartMs = null;
 			this.refreshingUsage = false;
 
+			// Notification bell
+			this.notificationBell = null;
+			this.notificationTooltip = null;
+			this.notificationToggle = null;
+			this.notificationsEnabled = this._loadNotificationPreference();
+
 			this.domObserver = null;
+		}
+
+		_loadNotificationPreference() {
+			try {
+				const stored = localStorage.getItem('cc-notifications-enabled');
+				return stored === 'true';
+			} catch {
+				return false;
+			}
+		}
+
+		_saveNotificationPreference(enabled) {
+			try {
+				localStorage.setItem('cc-notifications-enabled', enabled ? 'true' : 'false');
+				this.notificationsEnabled = enabled;
+			} catch {
+				// Silently fail if localStorage is not available
+			}
 		}
 
 		getProgressChrome() {
@@ -221,6 +280,19 @@
 			this.usageLine.className =
 				'text-text-400 text-[11px] cc-usageRow cc-hidden flex flex-row items-center gap-3 w-full';
 
+			// Notification bell button and icon (on the left)
+			this.notificationBell = document.createElement('button');
+			this.notificationBell.className = 'cc-notificationBell';
+			this.notificationBell.setAttribute('aria-label', 'Notification settings');
+			// SVG ICON START - Bell icon for notification settings
+			this.notificationBell.innerHTML = `
+				<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+					<path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z">
+				</svg>
+			`;
+			// SVG ICON END
+			
+
 			this.sessionUsageSpan = document.createElement('span');
 			this.sessionUsageSpan.className = 'cc-usageText';
 
@@ -257,6 +329,8 @@
 			this.weeklyGroup.appendChild(this.weeklyBar);
 			this.weeklyGroup.appendChild(this.weeklyUsageSpan);
 
+			// Add bell and session group to usage line
+			this.usageLine.appendChild(this.notificationBell);
 			this.usageLine.appendChild(this.sessionGroup);
 			this.usageLine.appendChild(this.weeklyGroup);
 
@@ -303,6 +377,73 @@
 				makeTooltip("7-day usage window.\nThe bar shows your usage.\nThe line marks where you are in the window."),
 				{ topOffset: 8 }
 			);
+
+			// Setup notification bell interactive tooltip
+			if (this.notificationBell) {
+				const { tip, toggle } = makeInteractiveTooltip((enabled) => {
+					this._saveNotificationPreference(enabled);
+					if (enabled && Notification.permission === 'default') {
+						Notification.requestPermission();
+					}
+				});
+
+				this.notificationTooltip = tip;
+				this.notificationToggle = toggle;
+				
+				// Set initial state
+				if (this.notificationsEnabled) {
+					this.notificationToggle.classList.add('cc-toggle-switch--on');
+				}
+
+				let tooltipVisible = false;
+				let hideTimeout = null;
+
+				const show = () => {
+					if (tooltipVisible) return;
+					tooltipVisible = true;
+					clearTimeout(hideTimeout);
+
+					const rect = this.notificationBell.getBoundingClientRect();
+					const tipRect = this.notificationTooltip.getBoundingClientRect();
+
+					let left = rect.left + rect.width / 2;
+					if (left + tipRect.width / 2 > window.innerWidth) left = window.innerWidth - tipRect.width / 2 - 10;
+					if (left - tipRect.width / 2 < 0) left = tipRect.width / 2 + 10;
+					//distance from the top of the bell icon to the top of the tooltip
+					let top = rect.top - tipRect.height - 6;
+					if (top < 10) top = rect.bottom + 10;
+
+					this.notificationTooltip.style.opacity = '1';
+					this.notificationTooltip.style.left = `${left}px`;
+					this.notificationTooltip.style.top = `${top}px`;
+					this.notificationTooltip.style.transform = 'translateX(-50%)';
+					this.notificationTooltip.style.pointerEvents = 'auto';
+				};
+
+				const hide = () => {
+					tooltipVisible = false;
+					this.notificationTooltip.style.opacity = '0';
+					this.notificationTooltip.style.pointerEvents = 'none';
+				};
+
+				this.notificationBell.addEventListener('pointerenter', (e) => {
+					if (e.pointerType === 'mouse') show();
+				});
+
+				this.notificationBell.addEventListener('pointerleave', (e) => {
+					if (e.pointerType === 'mouse') {
+						hideTimeout = setTimeout(hide, 200);
+					}
+				});
+
+				this.notificationTooltip.addEventListener('pointerenter', () => {
+					clearTimeout(hideTimeout);
+				});
+
+				this.notificationTooltip.addEventListener('pointerleave', () => {
+					hideTimeout = setTimeout(hide, 200);
+				});
+			}
 		}
 
 		attach() {
