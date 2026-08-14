@@ -27,6 +27,7 @@
 	 * @param {string} selector - CSS selector
 	 * @param {number} [timeoutMs] - Optional timeout in ms. Returns null if timeout expires.
 	 */
+	
 	function waitForElement(selector, timeoutMs) {
 		return new Promise((resolve) => {
 			const existing = document.querySelector(selector);
