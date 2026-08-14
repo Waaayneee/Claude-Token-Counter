@@ -648,7 +648,7 @@
 				const estimatedTokensUsed = Math.round((rawPct/100) * CC.CONST.CONTEXT_LIMIT_TOKENS);
 				//Update the tooltip text to show the estimated tokens used and the context limit.
 				if (this.sessionTooltip) {
-					this.sessionTooltip.textContent = `5-hour usage Window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
+					this.sessionTooltip.textContent = `5-hour usage window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
 				}
 
 				const width = Math.max(0, Math.min(100, rawPct));
