@@ -152,6 +152,8 @@
 			this.sessionWindowStartMs = null;
 			this.weeklyWindowStartMs = null;
 			this.refreshingUsage = false;
+			this.lastSessionPct = null; // NEW: token estimate keeps the session percent available for re-rendering
+			this.promptEstimateTokens = null; // NEW: token estimate replaces the reset countdown when draft text is present
 
 			// Notification bell
 			this.notificationBell = null;
@@ -628,6 +630,31 @@
 			this.headerContainer.appendChild(this.headerDisplay);
 		}
 
+		// NEW: token estimate - renders the session row text for either reset countdown or prompt estimate mode.
+		_renderSessionUsageText() {
+			const hasPct = typeof this.lastSessionPct === 'number';
+
+			if (this.promptEstimateTokens !== null) {
+				const prefix = hasPct ? `Session: ${this.lastSessionPct}% · ` : '';
+				this.sessionUsageSpan.textContent = `${prefix}Prompt Cost: ${this.promptEstimateTokens.toLocaleString()}`;
+				return;
+			}
+
+			if (!hasPct) {
+				this.sessionUsageSpan.textContent = '';
+				return;
+			}
+
+			const resetText = this.sessionResetMs ? ` · Resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
+			this.sessionUsageSpan.textContent = `Session: ${this.lastSessionPct}%${resetText}`;
+		}
+
+		// NEW: token estimate - updates the session row with the current draft token total or clears it.
+		setPromptEstimate(tokenCount) {
+			this.promptEstimateTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) ? tokenCount : null;
+			this._renderSessionUsageText();
+		}
+
 		setUsage(usage) {
 			this.refreshProgressChrome();
 			const session = usage?.five_hour || null;
@@ -641,8 +668,8 @@
 				const pct = Math.round(rawPct * 10) / 10;
 				this.sessionResetMs = session.resets_at ? Date.parse(session.resets_at) : null;
 				this.sessionWindowStartMs = this.sessionResetMs ? this.sessionResetMs - 5 * 60 * 60 * 1000 : null;
-				const resetText = this.sessionResetMs ? ` · resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
-				this.sessionUsageSpan.textContent = `Session: ${pct}%${resetText}`; //session percentage usage display
+				this.lastSessionPct = pct; // NEW: token estimate needs the current session percent for its prefix
+				this._renderSessionUsageText(); // NEW: token estimate keeps the session row text in one shared renderer
 				
 				//Calculation for the estimated tokens used.
 				const estimatedTokensUsed = Math.round((rawPct/100) * CC.CONST.CONTEXT_LIMIT_TOKENS);
@@ -656,7 +683,8 @@
 				this.sessionBarFill.classList.toggle('cc-warn', width >= 90);
 				this.sessionBarFill.classList.toggle('cc-full', width >= 99.5);
 			} else {
-				this.sessionUsageSpan.textContent = '';
+				this.lastSessionPct = null; // NEW: token estimate clears the cached percent when session usage is missing
+				this._renderSessionUsageText(); // NEW: token estimate keeps the session row text in one shared renderer
 				this.sessionBarFill.style.width = '0%';
 				this.sessionBarFill.classList.remove('cc-warn', 'cc-full');
 				this.sessionResetMs = null;
@@ -675,7 +703,7 @@
 				const pct = Math.round(rawPct * 10) / 10;
 				this.weeklyResetMs = weekly.resets_at ? Date.parse(weekly.resets_at) : null;
 				this.weeklyWindowStartMs = this.weeklyResetMs ? this.weeklyResetMs - 7 * 24 * 60 * 60 * 1000 : null;
-				const resetText = this.weeklyResetMs ? ` · resets in ${formatResetCountdown(this.weeklyResetMs)}` : '';
+				const resetText = this.weeklyResetMs ? ` · Resets in ${formatResetCountdown(this.weeklyResetMs)}` : '';
 				this.weeklyUsageSpan.textContent = `Weekly: ${pct}%${resetText}`;
 
 				const width = Math.max(0, Math.min(100, rawPct));
@@ -735,19 +763,14 @@
 				this._renderHeader();
 			}
 
-			// Reset countdown text + time markers
-			if (this.sessionResetMs && this.sessionUsageSpan?.textContent) {
-				const idx = this.sessionUsageSpan.textContent.indexOf('· resets in');
-				if (idx !== -1) {
-					const prefix = this.sessionUsageSpan.textContent.slice(0, idx + '· resets in '.length);
-					this.sessionUsageSpan.textContent = `${prefix}${formatResetCountdown(this.sessionResetMs)}`;
-				}
-			}
+			// NEW: token estimate - refreshes the session row text without disturbing prompt estimate mode.
+			this._renderSessionUsageText();
 
+			// Reset countdown text + time markers
 			if (this.weeklyResetMs && this.weeklyUsageSpan?.textContent) {
-				const idx = this.weeklyUsageSpan.textContent.indexOf('· resets in');
+				const idx = this.weeklyUsageSpan.textContent.indexOf('· Resets in');
 				if (idx !== -1) {
-					const prefix = this.weeklyUsageSpan.textContent.slice(0, idx + '· resets in '.length);
+					const prefix = this.weeklyUsageSpan.textContent.slice(0, idx + '· Resets in '.length);
 					this.weeklyUsageSpan.textContent = `${prefix}${formatResetCountdown(this.weeklyResetMs)}`;
 				}
 			}

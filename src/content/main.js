@@ -122,6 +122,14 @@
 	let currentConversationId = null;
 	let currentOrgId = null;
 
+	// NEW: token estimate state for the active composer input and its debounced refresh cycle.
+	let promptChatInput = null;
+	let promptComposerRoot = null;
+	let promptComposerObserver = null;
+	let promptInputObserver = null;
+	let promptEstimateDebounceId = null;
+	let promptEstimateRequestId = 0;
+
 	let usageState = null; // last snapshot
 	let usageResetMs = { five_hour: null, seven_day: null }; // cached parsed timestamps
 	let lastUsageSseMs = 0;
@@ -249,6 +257,60 @@
 	CC.bridge.on('cc:conversation', handleConversationPayload);
 	CC.bridge.on('cc:message_limit', handleMessageLimit);
 
+	// NEW: token estimate - recomputes the draft token total and writes it into the UI.
+	async function runPromptEstimate() {
+		if (!promptChatInput || !promptComposerRoot) return;
+
+		const text = promptChatInput.textContent || '';
+		const isTextEmpty = text.trim().length === 0;
+		const attachmentsPresent = CC.promptEstimator.hasAnyAttachment(promptComposerRoot);
+
+		if (isTextEmpty && !attachmentsPresent) {
+			promptEstimateRequestId += 1;
+			ui.setPromptEstimate(null);
+			return;
+		}
+
+		const requestId = ++promptEstimateRequestId;
+		const totalTokens = await CC.promptEstimator.estimatePrompt(promptChatInput, promptComposerRoot);
+		if (requestId !== promptEstimateRequestId) return; // stale result if the composer changed mid-estimate
+		ui.setPromptEstimate(totalTokens);
+	}
+
+	// NEW: token estimate - debounces DOM/input changes so the estimator doesn't run on every mutation.
+	function scheduleRunPromptEstimate() {
+		if (promptEstimateDebounceId) clearTimeout(promptEstimateDebounceId);
+		promptEstimateDebounceId = setTimeout(() => {
+			promptEstimateDebounceId = null;
+			runPromptEstimate();
+		}, CC.CONST.PROMPT_ESTIMATE_DEBOUNCE_MS);
+	}
+
+	// NEW: token estimate - wires the prompt input and composer observer once per chat input element.
+	function attachPromptEstimatorListeners(chatInput) {
+		if (!chatInput || chatInput.hasAttribute('data-cc-prompt-estimator')) return;
+		chatInput.setAttribute('data-cc-prompt-estimator', 'true');
+
+		promptChatInput = chatInput;
+		promptComposerRoot = CC.promptEstimator.findComposerRoot(chatInput);
+
+		chatInput.addEventListener('input', scheduleRunPromptEstimate);
+
+		if (promptComposerObserver) promptComposerObserver.disconnect();
+		promptComposerObserver = new MutationObserver(scheduleRunPromptEstimate);
+		promptComposerObserver.observe(promptComposerRoot, { childList: true, subtree: true });
+
+		scheduleRunPromptEstimate();
+	}
+
+	// NEW: token estimate - rebinds the estimator if Claude re-renders the composer input.
+	function ensurePromptEstimatorAttached() {
+		const chatInput = document.querySelector(CC.DOM.CHAT_INPUT);
+		if (!chatInput) return;
+		if (chatInput === promptChatInput && document.contains(chatInput)) return;
+		attachPromptEstimatorListeners(chatInput);
+	}
+
 	async function handleUrlChange() {
 		currentConversationId = getConversationId();
 
@@ -259,6 +321,9 @@
 		});
 		waitForElement(CC.DOM.CHAT_MENU_TRIGGER, 60000).then((el) => {
 			if (el) ui.attachHeader();
+		});
+		waitForElement(CC.DOM.CHAT_INPUT, 60000).then((el) => {
+			if (el) attachPromptEstimatorListeners(el); // NEW: token estimate starts once the chat input exists
 		});
 
 		if (!currentConversationId) {
@@ -277,6 +342,10 @@
 
 	const unobserveUrl = observeUrlChanges(handleUrlChange);
 	window.addEventListener('beforeunload', unobserveUrl);
+
+	// NEW: token estimate - watches for composer re-renders so the listener survives sent messages.
+	promptInputObserver = new MutationObserver(ensurePromptEstimatorAttached);
+	promptInputObserver.observe(document.body, { childList: true, subtree: true });
 
 	// Refresh on branch navigation - watch for the branch indicator to change
 	let branchObserver = null;
