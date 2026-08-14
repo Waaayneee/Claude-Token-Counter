@@ -464,7 +464,7 @@
 
 				this.notificationBell.addEventListener('pointerleave', (e) => {
 					if (e.pointerType === 'mouse') {
-						hideTimeout = setTimeout(hide, 1600);
+						hideTimeout = setTimeout(hide, 200);
 					}
 				});
 
@@ -473,7 +473,7 @@
 				});
 
 				this.notificationTooltip.addEventListener('pointerleave', () => {
-					hideTimeout = setTimeout(hide, 1600);
+					hideTimeout = setTimeout(hide, 200);
 				});
 			}
 		}

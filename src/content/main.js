@@ -326,15 +326,21 @@
 
 		if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
 			rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
-			// TODO: ADD NOTIFICATION FEATURE HERE - Notify user that 5-hour usage window has reset
-			sendNotification('5-hour usage window reset', {
-				body: 'Your Claude usage window has reset. You can now make new requests.'
-			});
+			// Notify user that 5-hour usage window has reset
+			const isNotificationsEnabled = localStorage.getItem('cc-notifications-enabled') === 'true';
+			if (isNotificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+				new Notification('Claude session reset', {
+					body: 'Your 5-hour usage window has reset.'
+				});
+			}
+
 			refreshUsage();
 		}
+
 		if (usageResetMs.seven_day && now >= usageResetMs.seven_day && rolloverHandledForResetMs.seven_day !== usageResetMs.seven_day) {
 			rolloverHandledForResetMs.seven_day = usageResetMs.seven_day;
 			// TODO: ADD NOTIFICATION FEATURE HERE - Notify user that 7-day usage window has reset
+			// im ngl idk if people would even need this
 			sendNotification('7-day usage window reset', {
 				body: 'Your 7-day usage window has reset. You can now make new requests.'
 			});
