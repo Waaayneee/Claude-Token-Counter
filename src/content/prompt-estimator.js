@@ -3,21 +3,11 @@
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
-	// Support both raster image payloads and text-backed document formats across common file types.
+	// Support common raster image payloads and keep the existing image estimator intact.
 	const IMAGE_EXTENSIONS = new Set([
 		'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
 		'heic', 'heif', 'heics', 'heifs', 'avif', 'tif', 'tiff', 'ico', 'jfif'
 	]);
-	const TEXT_ATTACHMENT_EXTENSIONS = new Set([
-		'txt', 'md', 'mdx', 'markdown', 'rst', 'rtf', 'odt', 'csv', 'tsv',
-		'xls', 'xlsx', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
-		'properties', 'env', 'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'cc',
-		'cxx', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'kts', 'scala', 'html',
-		'htm', 'xhtml', 'css', 'scss', 'sass', 'less', 'sql', 'sh', 'bash', 'zsh',
-		'ps1', 'bat', 'cmd', 'log', 'tex', 'latex', 'ppt', 'pptx', 'odp', 'ods',
-		'key', 'keynote', 'odp', 'ods'
-	]);
-	const TEXT_FILE_PATTERN = /([A-Za-z0-9_. -]+\.(?:txt|md|mdx|markdown|rst|rtf|odt|csv|tsv|xls|xlsx|json|jsonl|xml|yaml|yml|toml|ini|cfg|properties|env|py|js|jsx|ts|tsx|java|cpp|c|cc|cxx|cs|go|rs|rb|php|swift|kt|kts|scala|html|htm|xhtml|css|scss|sass|less|sql|sh|bash|zsh|ps1|bat|cmd|log|tex|latex|ppt|pptx|odp|ods|key|keynote))(?:[^\d\r\n]*?(\d[\d,]*)\s*lines?)?/gi;
 	const imageTokenCache = new Map();
 
 	// Pull the last extension from a filename or path so we can match attachment types consistently.
@@ -74,52 +64,6 @@
 	function isImageAttachment(filename) {
 		const ext = getFileExtension(filename || '');
 		return !!ext && IMAGE_EXTENSIONS.has(ext);
-	}
-
-	function isTextAttachment(filename) {
-		const ext = getFileExtension(filename || '');
-		return !!ext && TEXT_ATTACHMENT_EXTENSIONS.has(ext);
-	}
-
-	function parseTextAttachmentRecords(text) {
-		if (typeof text !== 'string') return [];
-		const records = [];
-		for (const match of text.matchAll(TEXT_FILE_PATTERN)) {
-			const name = match[1];
-			const lineCount = match[2] ? Number.parseInt(match[2], 10) : null;
-			if (!name) continue;
-			records.push({ name, lineCount });
-		}
-		return records;
-	}
-
-	function getTextLineCount(label) {
-		if (typeof label !== 'string') return null;
-		const match = label.match(/(\d[\d,]*)\s*lines?\b/i);
-		if (!match) return null;
-		const lineCount = Number.parseInt(match[1].replace(/,/g, ''), 10);
-		return Number.isFinite(lineCount) ? lineCount : null;
-	}
-
-	function getTextAttachmentLineCount(label, name) {
-		if (typeof label !== 'string' || !label.trim()) return null;
-		const patterns = [
-			new RegExp(`(?:^|[^A-Za-z0-9_.-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^\\d\\r\\n]*?)(\\d[\\d,]*)\\s*lines?\\b`, 'i'),
-			/(\d[\d,]*)\s*lines?\b/i
-		];
-		for (const pattern of patterns) {
-			const match = label.match(pattern);
-			if (!match) continue;
-			const lineCount = Number.parseInt(match[1].replace(/,/g, ''), 10);
-			if (Number.isFinite(lineCount)) return lineCount;
-		}
-		return null;
-	}
-
-	function hasTextDocumentLabel(label) {
-		if (typeof label !== 'string') return false;
-		const text = label.toLowerCase();
-		return parseTextAttachmentRecords(label).length > 0 || Array.from(TEXT_ATTACHMENT_EXTENSIONS).some((ext) => text.includes(`.${ext}`));
 	}
 
 	// Find the nearest Composer root so the estimator can inspect attached files in context.
@@ -185,24 +129,20 @@
 		imageTokenCache.clear();
 	}
 
-	// Return true when the draft contains a supported image or text-backed attachment.
+	// Return true when the composer contains a supported image attachment.
 	function hasAnyAttachment(composerRoot) {
 		if (!composerRoot) return false;
-		const text = composerRoot.textContent || '';
-		if (parseTextAttachmentRecords(text).length > 0) return true;
 
-		const candidates = composerRoot.querySelectorAll('*');
+		const candidates = composerRoot.querySelectorAll('img, button, [aria-label], [title], [data-name], [data-filename]');
 		for (const node of candidates) {
 			const names = getAttachmentNames(node);
-			if (names.some((name) => isImageAttachment(name) || isTextAttachment(name))) return true;
-			const label = node.getAttribute?.('aria-label') || node.getAttribute?.('title') || node.getAttribute?.('data-name') || node.getAttribute?.('data-filename') || node.textContent || '';
-			if (hasTextDocumentLabel(label)) return true;
+			if (names.some((name) => isImageAttachment(name))) return true;
 		}
 
 		return false;
 	}
 
-	// Add token cost for all supported attachments while ignoring unsupported binary-only files.
+	// Add token cost only for image attachments; document attachment estimation is intentionally disabled.
 	async function estimateAttachmentTokens(composerRoot) {
 		if (!composerRoot) return 0;
 
@@ -210,36 +150,17 @@
 		const imageTokenPromises = [];
 		const seenNames = new Set();
 
-		const rootText = composerRoot.textContent || '';
-		for (const record of parseTextAttachmentRecords(rootText)) {
-			if (seenNames.has(record.name)) continue;
-			seenNames.add(record.name);
-			if (!isTextAttachment(record.name)) continue;
-			if (record.lineCount !== null && record.lineCount !== undefined) {
-				total += record.lineCount * CC.CONST.TEXT_FILE_TOKENS_PER_LINE;
-			}
-		}
-
-		const candidates = composerRoot.querySelectorAll('*');
+		const candidates = composerRoot.querySelectorAll('img, button, [aria-label], [title], [data-name], [data-filename]');
 		for (const node of candidates) {
 			const names = getAttachmentNames(node);
 			for (const name of names) {
 				if (seenNames.has(name)) continue;
 				seenNames.add(name);
 
-				if (isImageAttachment(name)) {
-					const img = node.tagName === 'IMG' ? node : node.closest?.('img');
-					if (img) imageTokenPromises.push(estimateImageTokens(img, name));
-					continue;
-				}
+				if (!isImageAttachment(name)) continue;
 
-				if (isTextAttachment(name)) {
-					const label = node.getAttribute?.('aria-label') || node.getAttribute?.('title') || node.getAttribute?.('data-name') || node.getAttribute?.('data-filename') || node.textContent || '';
-					const lineCount = getTextAttachmentLineCount(label, name) ?? getTextLineCount(label);
-					if (lineCount !== null) {
-						total += lineCount * CC.CONST.TEXT_FILE_TOKENS_PER_LINE;
-					}
-				}
+				const img = node.tagName === 'IMG' ? node : node.closest?.('img');
+				if (img) imageTokenPromises.push(estimateImageTokens(img, name));
 			}
 		}
 
