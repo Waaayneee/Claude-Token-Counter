@@ -8,37 +8,37 @@ A browser extension that shows estimated token usage, cache timers, and session/
 
 Shows an approximate token count for the current conversation, with a mini progress bar scaled to Claude's 200k (estimated) token context limit.
 
-**[Screenshot placeholder: header showing live token count and mini progress bar]**
+![live token screenshot](README-images/live-token-count.png)
 
-### 1.2 Cache Timer (dont have)
+### 1.2 Session and Weekly Usage Bars (Pacer Bars)
 
-Shows a countdown for how long the conversation stays in the prompt cache after your last message, since cached messages are cheaper.
+Shows
 
-**[Screenshot placeholder: header showing cache timer countdown]**
+![live token screenshot](README-images/live-token-count.png)
 
 ### 1.3 Session and Weekly Usage Bars
 
 Shows your 5 hour session usage and 7 day usage windows, each with a countdown to when the window resets.
 
-**[Screenshot placeholder: usage row showing session and weekly bars]**
+![live token screenshot](README-images/live-token-count.png)
 
 ### 1.4 Prompt Estimator
 
 As you type in the composer, shows a live estimated token count for your draft, including attached images.
 
-**[Screenshot placeholder: composer showing live prompt token estimate]**
+![live token screenshot](README-images/live-token-count.png)
 
 ### 1.5 Image Token Estimation
 
 Estimates the token cost of attached images based on their pixel dimensions.
 
-**[Screenshot placeholder: composer with an attached image and its estimated token cost]**
+![live token screenshot](README-images/live-token-count.png)
 
 ### 1.6 Notification Bell
 
 Optional browser notifications when your 5 hour or 7 day usage window resets.
 
-**[Screenshot placeholder: notification bell with the toggle open]**
+![live token screenshot](README-images/live-token-count.png)
 
 ## 2. How to Install It
 
