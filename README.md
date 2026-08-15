@@ -2,7 +2,7 @@
 
 A browser extension that shows estimated token usage, cache timers, and session/weekly usage bars directly on claude.ai.
 
-## 1. What It Does
+## 1. What Does It Do?
 
 ### 1.1 Live Token Count
 
@@ -10,7 +10,7 @@ Shows an approximate token count for the current conversation, with a mini progr
 
 ![live token screenshot](README-images/live-token-count.png)
 
-### 1.3 Session and Weekly Usage Bars (Pacer Bars)
+### 1.2 Session and Weekly Usage Bars (Pacer Bars)
 
 Shows where you currently are in time within that window, from the start of the window to its reset. This lets you compare your usage pace against the time that has actually passed, like a running pacer.
 
