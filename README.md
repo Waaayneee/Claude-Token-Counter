@@ -14,31 +14,31 @@ Shows an approximate token count for the current conversation, with a mini progr
 
 Shows where you currently are in time within that window, from the start of the window to its reset. This lets you compare your usage pace against the time that has actually passed, like a running pacer.
 
-![live token screenshot](README-images/session-weekly-bar.png)
+![session and weekly usage pacer bar screenshot](README-images/session-weekly-bar.png)
 
 ### 1.3 Session and Weekly Usage Bars
 
 Shows your 5 hour session usage and 7 day usage windows, each with a countdown to when the window resets.
 
-![live token screenshot](README-images/session-weekly-usage.png)
+![session and weekly usage bar screenshot](README-images/session-weekly-usage.png)
 
-### 1.4 Prompt Estimator
+### 1.4 Prompt Cost Estimator (In Tokens)
 
 As you type in the composer, shows a live estimated token count for your draft, including attached images.
 
-![live token screenshot](README-images/prompt-est.png)
+![prompt cost estimator screenshot](README-images/prompt-est.png)
 
 ### 1.5 Image Token Estimator
 
 Estimates the token cost of attached images based on their pixel dimensions.
 
-![live token screenshot](README-images/img-est.png)
+![image token estimator screenshot](README-images/img-est.png)
 
 ### 1.6 Notification Bell
 
 Optional browser notifications when your 5 hour usage window resets.
 
-![live token screenshot](README-images/notification.png)
+![hit that notification bell screenshot](README-images/notification.png)
 
 ## 2. How to Install It
 
@@ -54,7 +54,8 @@ Optional browser notifications when your 5 hour usage window resets.
 5. Select the project folder (the one containing `manifest.json`).
 6. The extension is now installed. Open or refresh claude.ai to see it.
 
-**[Screenshot placeholder: Load unpacked button in chrome://extensions]**
+![extension opera chromium screenshot](README-images/chromium-opera.png)
+(This is what it looks like on OperaGx)
 
 ### 2.2 Firefox
 
