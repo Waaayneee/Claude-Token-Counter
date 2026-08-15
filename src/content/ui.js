@@ -660,7 +660,7 @@
 
 			if (this.promptEstimateTokens !== null) {
 				const prefix = hasPct ? `Session: ${this.lastSessionPct}% · ` : '';
-				this.sessionUsageSpan.textContent = `${prefix}Token Est: ${this.promptEstimateTokens.toLocaleString()}`;
+				this.sessionUsageSpan.textContent = `${prefix}Prompt Cost (Est.): ${this.promptEstimateTokens.toLocaleString()}`;
 				return;
 			}
 
