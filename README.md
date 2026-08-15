@@ -10,35 +10,35 @@ Shows an approximate token count for the current conversation, with a mini progr
 
 ![live token screenshot](README-images/live-token-count.png)
 
-### 1.2 Session and Weekly Usage Bars (Pacer Bars)
+### 1.3 Session and Weekly Usage Bars (Pacer Bars)
 
-Shows
+Shows where you currently are in time within that window, from the start of the window to its reset. This lets you compare your usage pace against the time that has actually passed, like a running pacer.
 
-![live token screenshot](README-images/live-token-count.png)
+![live token screenshot](README-images/session-weekly-bar.png)
 
 ### 1.3 Session and Weekly Usage Bars
 
 Shows your 5 hour session usage and 7 day usage windows, each with a countdown to when the window resets.
 
-![live token screenshot](README-images/live-token-count.png)
+![live token screenshot](README-images/session-weekly-usage.png)
 
 ### 1.4 Prompt Estimator
 
 As you type in the composer, shows a live estimated token count for your draft, including attached images.
 
-![live token screenshot](README-images/live-token-count.png)
+![live token screenshot](README-images/prompt-est.png)
 
-### 1.5 Image Token Estimation
+### 1.5 Image Token Estimator
 
 Estimates the token cost of attached images based on their pixel dimensions.
 
-![live token screenshot](README-images/live-token-count.png)
+![live token screenshot](README-images/img-est.png)
 
 ### 1.6 Notification Bell
 
-Optional browser notifications when your 5 hour or 7 day usage window resets.
+Optional browser notifications when your 5 hour usage window resets.
 
-![live token screenshot](README-images/live-token-count.png)
+![live token screenshot](README-images/notification.png)
 
 ## 2. How to Install It
 
