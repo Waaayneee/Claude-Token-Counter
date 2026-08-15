@@ -19,12 +19,14 @@
 		return match ? match[1].toLowerCase() : '';
 	}
 
+	// Pull filename-like substrings out of a label so attachment discovery can work from DOM text alone.
 	function extractFileNamesFromText(value) {
 		if (typeof value !== 'string') return [];
 		const matches = value.matchAll(/(?:^|[^A-Za-z0-9])([A-Za-z0-9_. -]+\.(?:[A-Za-z0-9]+))/g);
 		return Array.from(matches, (match) => match[1].trim()).filter((name) => !!name && /\.[A-Za-z0-9]+$/.test(name));
 	}
 
+	// Gather filename hints from the attachment node itself and its nearest button wrapper.
 	function getAttachmentNames(node) {
 		if (!node) return [];
 		const names = new Set();

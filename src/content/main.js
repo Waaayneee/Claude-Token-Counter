@@ -5,11 +5,13 @@
 	if (CC.__started) return;
 	CC.__started = true;
 
+	// Read the active chat ID from the current Claude URL so the extension can sync to the correct conversation.
 	function getConversationId() {
 		const match = window.location.pathname.match(/\/chat\/([^/?]+)/);
 		return match ? match[1] : null;
 	}
 
+	// Pull the active org ID from the cookie so requests can be scoped to the correct workspace.
 	function getOrgIdFromCookie() {
 		try {
 			return document.cookie
@@ -93,6 +95,7 @@
 		return { five_hour: fiveHour, seven_day: sevenDay };
 	}
 
+	// Parse the message-limit stream payload into the same usage shape the UI already understands.
 	function parseUsageFromMessageLimit(raw) {
 		if (!raw?.windows || typeof raw.windows !== 'object') return null;
 
@@ -139,6 +142,7 @@
 
 	const bridgeReady = CC.injectBridgeOnce();
 
+	// Show a browser notification if the user has enabled them and the browser allows it.
 	function sendNotification(title, options = {}) {
 		if (!ui.notificationsEnabled) return;
 		
@@ -152,7 +156,7 @@
 
 			if (Notification.permission === 'granted') {
 				new Notification(title, {
-					icon: '/icons/icon-128.png',
+					icon: '/icons/icon128.png',
 					...options
 				});
 			}
@@ -160,6 +164,7 @@
 		}
 	}
 
+	// Store the newest usage payload and push the normalized values into the UI state.
 	function applyUsageUpdate(normalized, source) {
 		if (!normalized) return;
 		const now = Date.now();
@@ -171,12 +176,14 @@
 		ui.setUsage(normalized);
 	}
 
+	// Keep the active org ID in sync with the current conversation so subsequent requests use the right workspace.
 	function updateOrgIdIfNeeded(newOrgId) {
 		if (newOrgId && typeof newOrgId === 'string' && newOrgId !== currentOrgId) {
 			currentOrgId = newOrgId;
 		}
 	}
 
+	// Request the latest org usage metrics and normalize them for the usage bars and reset timers.
 	async function refreshUsage() {
 		await bridgeReady;
 		const orgId = currentOrgId || getOrgIdFromCookie();
@@ -198,6 +205,7 @@
 		applyUsageUpdate(parsed, 'usage');
 	}
 
+	// Refresh the current conversation tree so the extension can compute the latest token totals.
 	async function refreshConversation() {
 		await bridgeReady;
 		if (!currentConversationId) {
@@ -215,11 +223,13 @@
 		}
 	}
 
+	// Mark the conversation as actively caching when Claude begins generating a response.
 	function handleGenerationStart() {
 		if (!currentConversationId) return;
 		ui.setPendingCache(true);
 	}
 
+	// Convert the fetched conversation tree into token totals and update the header cache state.
 	async function handleConversationPayload({ orgId, conversationId, data }) {
 		if (!conversationId || conversationId !== currentConversationId) return;
 		updateOrgIdIfNeeded(orgId);
@@ -229,6 +239,7 @@
 		ui.setConversationMetrics({ totalTokens: metrics.totalTokens, cachedUntil: metrics.cachedUntil });
 	}
 
+	// Translate the SSE message-limit payload into the same usage model used elsewhere in the UI.
 	function handleMessageLimit(messageLimit) {
 		const parsed = parseUsageFromMessageLimit(messageLimit);
 		applyUsageUpdate(parsed, 'sse');
@@ -295,6 +306,7 @@
 		scheduleRunPromptEstimate();
 	}
 
+	// Rebind the UI when the visible chat route changes so usage and prompt widgets stay in sync.
 	async function handleUrlChange() {
 		currentConversationId = getConversationId();
 
@@ -358,6 +370,7 @@
 
 	handleUrlChange();
 
+	// Refresh usage countdowns and reset notifications without re-fetching the server state every second.
 	function tick() {
 		ui.tick();
 

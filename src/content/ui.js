@@ -3,12 +3,14 @@
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
+	// Format a duration in seconds as M:SS for the cache countdown display.
 	function formatSeconds(totalSeconds) {
 		const minutes = Math.floor(totalSeconds / 60);
 		const seconds = totalSeconds % 60;
 		return `${minutes}:${String(seconds).padStart(2, '0')}`;
 	}
 
+	// Render a reset timestamp as a compact countdown that changes units as the deadline gets closer.
 	function formatResetCountdown(timestampMs) {
 		// <= 0: reset time reached
 		const diffMs = timestampMs - Date.now();
@@ -33,6 +35,7 @@
 		return `${days}d ${remHours}h`;
 	}
 
+	// Attach pointer and touch behavior to a tooltip trigger so the tooltip can be shown and hidden consistently.
 	function setupTooltip(element, tooltip, { topOffset = 10 } = {}) {
 		if (!element || !tooltip) return;
 		if (element.hasAttribute('data-tooltip-setup')) return;
@@ -88,6 +91,7 @@
 		});
 	}
 
+	// Create a basic tooltip element with the styling used throughout the extension UI.
 	function makeTooltip(text) {
 		const tip = document.createElement('div');
 		tip.className = 'bg-bg-500 text-text-000 cc-tooltip';
@@ -96,6 +100,7 @@
 		return tip;
 	}
 
+	// Build the notification tooltip and its toggle switch in one place so the UI can wire them together.
 	function makeInteractiveTooltip() {
 		const tip = document.createElement('div');
 		tip.className = 'bg-bg-500 text-text-000 cc-tooltip cc-tooltip--interactive';
@@ -125,6 +130,7 @@
 	}
 
 	class CounterUI {
+		// Store the injected callback and initialize the DOM references and runtime state.
 		constructor({ onUsageRefresh } = {}) {
 			this.onUsageRefresh = onUsageRefresh || null;
 
@@ -164,6 +170,7 @@
 			this.domObserver = null;
 		}
 
+		// Read the saved notification preference from localStorage so the toggle starts in the right state.
 		_loadNotificationPreference() {
 			try {
 				const stored = localStorage.getItem('cc-notifications-enabled');
@@ -173,6 +180,7 @@
 			}
 		}
 
+		// Persist the notification toggle state and mirror it in memory when storage is available.
 		_saveNotificationPreference(enabled) {
 			try {
 				localStorage.setItem('cc-notifications-enabled', enabled ? 'true' : 'false');
@@ -182,6 +190,7 @@
 			}
 		}
 
+		// Derive the current bar colors from Claude's theme mode.
 		getProgressChrome() {
 			const root = document.documentElement;
 			const modeDark = root.dataset?.mode === 'dark';
@@ -196,6 +205,7 @@
 			};
 		}
 
+		// Apply the current theme colors to all bars so the header stays visually consistent.
 		refreshProgressChrome() {
 			const { strokeColor, fillColor, markerColor } = this.getProgressChrome();
 
@@ -212,6 +222,7 @@
 			applyBarChrome(this.weeklyBar, { fillWarn: CC.COLORS.RED_WARNING });
 		}
 
+		// Create the header and usage widgets, then wire their tooltips and DOM observers.
 		initialize() {
 			// Header container (tokens + cache timer)
 			this.headerContainer = document.createElement('div');
@@ -236,12 +247,14 @@
 			this._observeTheme();
 		}
 
+		// Watch Claude's theme attribute so the bar colors update when the site theme changes.
 		_observeTheme() {
 			// Watch for theme changes (data-mode attribute on <html>)
 			const observer = new MutationObserver(() => this.refreshProgressChrome());
 			observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode'] });
 		}
 
+		// Reattach the header and usage row when Claude rerenders the surrounding DOM.
 		_observeDom() {
 			// Track pending reattach attempts independently
 			let usageReattachPending = false;
@@ -270,6 +283,7 @@
 			this.domObserver.observe(document.body, { childList: true, subtree: true });
 		}
 
+		// Build the session and weekly usage row, including the notification bell and progress bars.
 		_initUsageLine() {
 			this.usageLine = document.createElement('div');
 			this.usageLine.className =
@@ -345,6 +359,7 @@
 			});
 		}
 
+		// Create the static and interactive tooltips used by the header and usage widgets.
 		_setupTooltips() {
 			this.lengthTooltip = makeTooltip(
 				"Approximate tokens (excludes system prompt).\nUses a generic tokenizer, may differ from Claude's count.\nBecomes invalid after context compaction.\nBar scale: 200k tokens (Claude's maximum context length, will compact before then)."
@@ -428,6 +443,7 @@
 					this.notificationToggle.classList.toggle('cc-toggle-switch--on', this.notificationsEnabled);
 				});
 
+				// Show the notification tooltip and position it relative to the bell icon.
 				const show = () => {
 					if (tooltipVisible) return;
 					tooltipVisible = true;
@@ -450,6 +466,7 @@
 					this.notificationTooltip.style.pointerEvents = 'auto';
 				};
 
+				// Hide the notification tooltip unless a permission prompt is still open.
 				const hide = () => {
 					// Don't hide while permission dialog is open
 					if (permissionDialogPending) return;
@@ -480,12 +497,14 @@
 			}
 		}
 
+		// Attach both UI sections and refresh their styling after insertion.
 		attach() {
 			this.attachHeader();
 			this.attachUsageLine();
 			this.refreshProgressChrome();
 		}
 
+		// Insert the token header next to Claude's chat menu when the target container exists.
 		attachHeader() {
 			const chatMenu = document.querySelector(CC.DOM.CHAT_MENU_TRIGGER);
 			if (!chatMenu) return;
@@ -498,12 +517,14 @@
 			this.refreshProgressChrome();
 		}
 
+		// Insert the usage row under the model selector toolbar when the target row can be found.
 		attachUsageLine() {
 			if (!this.usageLine) return;
 			const modelSelector = document.querySelector(CC.DOM.MODEL_SELECTOR_DROPDOWN);
 			if (!modelSelector) return;
 			const gridContainer = modelSelector.closest('[data-testid="chat-input-grid-container"]');
 			const gridArea = modelSelector.closest('[data-testid="chat-input-grid-area"]');
+			// Walk up the DOM until we find the toolbar row that contains the model selector.
 			const findToolbarRow = (el, stopAt) => {
 				let cur = el;
 				while (cur && cur !== document.body) {
@@ -531,6 +552,7 @@
 			this.refreshProgressChrome();
 		}
 
+		// Toggle the cached-state hint while Claude is generating a new response.
 		setPendingCache(pending) {
 			this.pendingCache = pending;
 			if (this.cacheTimeSpan) {
@@ -543,6 +565,7 @@
 			}
 		}
 
+		// Render the visible token total, cache timer, and mini bar from the latest conversation metrics.
 		setConversationMetrics({ totalTokens, cachedUntil } = {}) {
 			this.pendingCache = false;
 
@@ -608,6 +631,7 @@
 			this._renderHeader();
 		}
 
+		// Rebuild the header container from the current token and cache fragments.
 		_renderHeader() {
 			this.headerContainer.replaceChildren();
 
@@ -636,7 +660,7 @@
 
 			if (this.promptEstimateTokens !== null) {
 				const prefix = hasPct ? `Session: ${this.lastSessionPct}% · ` : '';
-				this.sessionUsageSpan.textContent = `${prefix}Token Est: ${this.promptEstimateTokens.toLocaleString()}`;
+				this.sessionUsageSpan.textContent = `${prefix}Prompt Cost (Est.): ${this.promptEstimateTokens.toLocaleString()}`;
 				return;
 			}
 
@@ -655,6 +679,7 @@
 			this._renderSessionUsageText();
 		}
 
+		// Update the session and weekly usage bars from the normalized usage payload.
 		setUsage(usage) {
 			this.refreshProgressChrome();
 			const session = usage?.five_hour || null;
@@ -719,6 +744,7 @@
 			this._updateMarkers();
 		}
 
+		// Position the timeline markers based on the current reset window start and end times.
 		_updateMarkers() {
 			const now = Date.now();
 
