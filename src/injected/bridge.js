@@ -3,10 +3,7 @@
 
 	const CC_MARKER = 'ClaudeCounter';
 
-	// Capture original fetch before anyone else can wrap it
 	const originalFetch = window.fetch;
-
-	// Wrap history methods early to detect SPA navigation (before frameworks cache them)
 	const originalPushState = history.pushState.bind(history);
 	const originalReplaceState = history.replaceState.bind(history);
 
@@ -22,11 +19,11 @@
 		return result;
 	};
 
+	// Hook page requests to surface generation, usage, and conversation events in the extension.
 	window.fetch = async (...args) => {
 		const url = toAbsoluteUrl(args[0]);
 		const opts = args[1] || {};
 
-		// Detect generation start (completion requests)
 		if (url && opts.method === 'POST' && (url.includes('/completion') || url.includes('/retry_completion'))) {
 			post('cc:generation_start', {});
 		}
@@ -78,7 +75,6 @@
 	}
 
 	function getConversationMeta(url) {
-		// /api/organizations/{orgId}/chat_conversations/{conversationId}
 		const match = url.match(/^https:\/\/claude\.ai\/api\/organizations\/([^/]+)\/chat_conversations\/([^/?]+)/);
 		return match ? { orgId: match[1], conversationId: match[2] } : null;
 	}

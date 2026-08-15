@@ -78,10 +78,8 @@
 	function stringifyCountableContentItem(item) {
 		if (!isCountableContentItem(item)) return '';
 
-		// Common fast-path for text blocks.
 		if (item.type === 'text' && typeof item.text === 'string') return item.text;
 
-		// Tool blocks: include observable payloads deterministically, but exclude "thinking".
 		if (item.type === 'tool_use') {
 			const minimal = {
 				id: item.id,
@@ -100,7 +98,6 @@
 			return stableStringify(minimal);
 		}
 
-		// Fallback: keep only known-ish textual fields to avoid pulling in huge binary-ish blobs.
 		const minimal = {};
 		if (typeof item.text === 'string') minimal.text = item.text;
 		if (typeof item.title === 'string') minimal.title = item.title;
@@ -114,14 +111,12 @@
 	function stringifyMessageCountables(message) {
 		const parts = [];
 
-		// Message content blocks (primary source for tools, text, etc).
 		const content = Array.isArray(message?.content) ? message.content : [];
 		for (const item of content) {
 			const s = stringifyCountableContentItem(item);
 			if (s) parts.push(s);
 		}
 
-		// Attachment extracted content (observable, already text).
 		const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
 		for (const a of attachments) {
 			if (typeof a?.extracted_content === 'string' && a.extracted_content) {
@@ -138,7 +133,6 @@
 			const res = await CC.bridge.requestHash(str);
 			if (res?.hash) return res.hash;
 		} catch {
-			// No local hashing fallback.
 		}
 		return null;
 	}
@@ -152,7 +146,7 @@
 
 	class TokenCache {
 		constructor() {
-			this._byMessageId = new Map(); // uuid -> { fp, tokens }
+			this._byMessageId = new Map();
 		}
 
 		async getMessageTokens(messageId, messageText) {
@@ -206,5 +200,5 @@
 		};
 	}
 
-	CC.tokens = { computeConversationMetrics, countTokens }; // MODIFIED: added countTokens export for prompt-estimator.js
+	CC.tokens = { computeConversationMetrics, countTokens };
 })();

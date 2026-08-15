@@ -32,11 +32,11 @@
 					return;
 				}
 
-				// Events
 				this._emit(data.type, data.payload);
 			});
 		}
 
+		// Dispatch a bridge event to every listener registered for that message type.
 		_emit(type, payload) {
 			const listeners = this._listeners.get(type);
 			if (!listeners) return;
@@ -51,6 +51,7 @@
 			return () => this._listeners.get(type)?.delete(fn);
 		}
 
+		// Send a request to the injected bridge and reject if it times out.
 		request(kind, payload, { timeoutMs = 10000 } = {}) {
 			const requestId = makeRequestId();
 			return new Promise((resolve, reject) => {
@@ -88,6 +89,7 @@
 
 	let bridgeReadyPromise = null;
 
+	// Inject the bridge script once so all page-level event hooks are available.
 	function injectBridgeOnce() {
 		if (bridgeReadyPromise) return bridgeReadyPromise;
 

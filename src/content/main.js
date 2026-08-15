@@ -21,12 +21,7 @@
 		}
 	}
 
-	/**
-	 * Wait for an element to appear in the DOM using MutationObserver.
-	 * More efficient than polling - reacts immediately when element appears.
-	 * @param {string} selector - CSS selector
-	 * @param {number} [timeoutMs] - Optional timeout in ms. Returns null if timeout expires.
-	 */
+	// Wait until a target element appears in the DOM without rolling polling loops.
 	function waitForElement(selector, timeoutMs) {
 		return new Promise((resolve) => {
 			const existing = document.querySelector(selector);
@@ -58,6 +53,7 @@
 
 	CC.waitForElement = waitForElement;
 
+	// Listen for SPA route changes so the UI can resync when the current chat changes.
 	function observeUrlChanges(callback) {
 		let lastPath = window.location.pathname;
 
@@ -78,6 +74,7 @@
 		};
 	}
 
+	// Normalize the org usage payload into a single format used by the UI and timers.
 	function parseUsageFromUsageEndpoint(raw) {
 		if (!raw || typeof raw !== 'object') return null;
 
@@ -241,6 +238,7 @@
 	CC.bridge.on('cc:conversation', handleConversationPayload);
 	CC.bridge.on('cc:message_limit', handleMessageLimit);
 
+	// Recompute the live draft estimate whenever the conversation input changes.
 	async function runPromptEstimate() {
 		const chatInput = document.querySelector(CC.DOM.CHAT_INPUT);
 		if (!chatInput) {
@@ -267,6 +265,7 @@
 		ui.setPromptEstimate(totalTokens);
 	}
 
+	// Debounce prompt estimation to avoid recomputing on every keystroke.
 	function scheduleRunPromptEstimate() {
 		if (promptEstimateDebounceId) clearTimeout(promptEstimateDebounceId);
 		promptEstimateDebounceId = setTimeout(() => {
@@ -275,6 +274,7 @@
 		}, CC.CONST.PROMPT_ESTIMATE_DEBOUNCE_MS);
 	}
 
+	// Bind the prompt estimator to the live composer so the estimate stays current.
 	function attachPromptEstimatorListeners(chatInput) {
 		if (!chatInput || chatInput.hasAttribute('data-cc-prompt-estimator')) return;
 		chatInput.setAttribute('data-cc-prompt-estimator', 'true');
