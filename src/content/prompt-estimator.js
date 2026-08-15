@@ -3,18 +3,126 @@
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
-	const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
-	const DOCUMENT_EXTENSIONS = ['pdf', 'docx'];
-	const TEXT_FILE_LABEL_PATTERN = /,\s*(\d+)\s*lines?$/i;
-
+	// Support both raster image payloads and text-backed document formats across common file types.
+	const IMAGE_EXTENSIONS = new Set([
+		'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg',
+		'heic', 'heif', 'heics', 'heifs', 'avif', 'tif', 'tiff', 'ico', 'jfif'
+	]);
+	const TEXT_ATTACHMENT_EXTENSIONS = new Set([
+		'txt', 'md', 'mdx', 'markdown', 'rst', 'rtf', 'odt', 'csv', 'tsv',
+		'xls', 'xlsx', 'json', 'jsonl', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
+		'properties', 'env', 'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'cpp', 'c', 'cc',
+		'cxx', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'kts', 'scala', 'html',
+		'htm', 'xhtml', 'css', 'scss', 'sass', 'less', 'sql', 'sh', 'bash', 'zsh',
+		'ps1', 'bat', 'cmd', 'log', 'tex', 'latex', 'ppt', 'pptx', 'odp', 'ods',
+		'key', 'keynote', 'odp', 'ods'
+	]);
+	const TEXT_FILE_PATTERN = /([A-Za-z0-9_. -]+\.(?:txt|md|mdx|markdown|rst|rtf|odt|csv|tsv|xls|xlsx|json|jsonl|xml|yaml|yml|toml|ini|cfg|properties|env|py|js|jsx|ts|tsx|java|cpp|c|cc|cxx|cs|go|rs|rb|php|swift|kt|kts|scala|html|htm|xhtml|css|scss|sass|less|sql|sh|bash|zsh|ps1|bat|cmd|log|tex|latex|ppt|pptx|odp|ods|key|keynote))(?:[^\d\r\n]*?(\d[\d,]*)\s*lines?)?/gi;
 	const imageTokenCache = new Map();
 
+	// Pull the last extension from a filename or path so we can match attachment types consistently.
 	function getFileExtension(filename) {
 		if (!filename || typeof filename !== 'string') return '';
-		const match = filename.match(/\.([a-zA-Z0-9]+)$/);
+		const normalized = filename.split('?')[0].split('#')[0].trim();
+		const lastSegment = normalized.split('/').pop();
+		const match = lastSegment.match(/\.([a-zA-Z0-9]+)$/);
 		return match ? match[1].toLowerCase() : '';
 	}
 
+	function extractFileNamesFromText(value) {
+		if (typeof value !== 'string') return [];
+		const matches = value.matchAll(/(?:^|[^A-Za-z0-9])([A-Za-z0-9_. -]+\.(?:[A-Za-z0-9]+))/g);
+		return Array.from(matches, (match) => match[1].trim()).filter((name) => !!name && /\.[A-Za-z0-9]+$/.test(name));
+	}
+
+	function getAttachmentNames(node) {
+		if (!node) return [];
+		const names = new Set();
+		const seen = new Set();
+
+		const addValues = (...values) => {
+			for (const value of values) {
+				if (typeof value !== 'string' || !value.trim()) continue;
+				for (const name of extractFileNamesFromText(value)) {
+					if (!seen.has(name)) {
+						seen.add(name);
+						names.add(name);
+					}
+				}
+			}
+		};
+
+		for (const attribute of ['alt', 'title', 'src', 'currentSrc', 'data-name', 'data-filename', 'aria-label']) {
+			addValues(node.getAttribute?.(attribute));
+		}
+
+		const text = node.textContent || '';
+		addValues(text);
+
+		const closestButton = node.closest?.('button');
+		if (closestButton) {
+			for (const attribute of ['aria-label', 'title', 'data-name', 'data-filename']) {
+				addValues(closestButton.getAttribute?.(attribute));
+			}
+			addValues(closestButton.textContent || '');
+		}
+
+		return Array.from(names);
+	}
+
+	// Accept common raster and HEIC/HEIF variants so image docs are handled across browsers.
+	function isImageAttachment(filename) {
+		const ext = getFileExtension(filename || '');
+		return !!ext && IMAGE_EXTENSIONS.has(ext);
+	}
+
+	function isTextAttachment(filename) {
+		const ext = getFileExtension(filename || '');
+		return !!ext && TEXT_ATTACHMENT_EXTENSIONS.has(ext);
+	}
+
+	function parseTextAttachmentRecords(text) {
+		if (typeof text !== 'string') return [];
+		const records = [];
+		for (const match of text.matchAll(TEXT_FILE_PATTERN)) {
+			const name = match[1];
+			const lineCount = match[2] ? Number.parseInt(match[2], 10) : null;
+			if (!name) continue;
+			records.push({ name, lineCount });
+		}
+		return records;
+	}
+
+	function getTextLineCount(label) {
+		if (typeof label !== 'string') return null;
+		const match = label.match(/(\d[\d,]*)\s*lines?\b/i);
+		if (!match) return null;
+		const lineCount = Number.parseInt(match[1].replace(/,/g, ''), 10);
+		return Number.isFinite(lineCount) ? lineCount : null;
+	}
+
+	function getTextAttachmentLineCount(label, name) {
+		if (typeof label !== 'string' || !label.trim()) return null;
+		const patterns = [
+			new RegExp(`(?:^|[^A-Za-z0-9_.-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^\\d\\r\\n]*?)(\\d[\\d,]*)\\s*lines?\\b`, 'i'),
+			/(\d[\d,]*)\s*lines?\b/i
+		];
+		for (const pattern of patterns) {
+			const match = label.match(pattern);
+			if (!match) continue;
+			const lineCount = Number.parseInt(match[1].replace(/,/g, ''), 10);
+			if (Number.isFinite(lineCount)) return lineCount;
+		}
+		return null;
+	}
+
+	function hasTextDocumentLabel(label) {
+		if (typeof label !== 'string') return false;
+		const text = label.toLowerCase();
+		return parseTextAttachmentRecords(label).length > 0 || Array.from(TEXT_ATTACHMENT_EXTENSIONS).some((ext) => text.includes(`.${ext}`));
+	}
+
+	// Find the nearest Composer root so the estimator can inspect attached files in context.
 	function findComposerRoot(chatInput) {
 		const form = chatInput.closest('form');
 		if (form) return form;
@@ -34,6 +142,7 @@
 		return document.body;
 	}
 
+	// Scale the image to the extension cap and estimate token usage from the pixel area.
 	function computeImageTokensFromDimensions(width, height) {
 		const longestEdge = Math.max(width, height);
 		let scaledWidth = width;
@@ -46,17 +155,15 @@
 		return Math.ceil((scaledWidth * scaledHeight) / CC.CONST.IMAGE_TOKEN_DIVISOR);
 	}
 
+	// Resolve image tokens once the image loads, falling back safely if the browser blocks it.
 	function estimateImageTokens(imgEl, cacheKey) {
 		return new Promise((resolve) => {
 			const compute = () => {
 				const width = imgEl.naturalWidth;
 				const height = imgEl.naturalHeight;
-				let tokens;
-				if (width > 0 && height > 0) {
-					tokens = computeImageTokensFromDimensions(width, height);
-				} else {
-					tokens = CC.CONST.IMAGE_TOKEN_FALLBACK;
-				}
+				const tokens = width > 0 && height > 0
+					? computeImageTokensFromDimensions(width, height)
+					: CC.CONST.IMAGE_TOKEN_FALLBACK;
 
 				const previousTokens = imageTokenCache.get(cacheKey);
 				const bestTokens = previousTokens ? Math.max(previousTokens, tokens) : tokens;
@@ -73,63 +180,76 @@
 		});
 	}
 
+	// Clear caches when the user empties the input so the estimate resets cleanly.
 	function resetImageTokenCache() {
 		imageTokenCache.clear();
 	}
 
+	// Return true when the draft contains a supported image or text-backed attachment.
 	function hasAnyAttachment(composerRoot) {
 		if (!composerRoot) return false;
+		const text = composerRoot.textContent || '';
+		if (parseTextAttachmentRecords(text).length > 0) return true;
 
-		const imgElements = composerRoot.querySelectorAll('img[alt]');
-		for (const img of imgElements) {
-			const ext = getFileExtension(img.getAttribute('alt'));
-			if (DOCUMENT_EXTENSIONS.includes(ext) || IMAGE_EXTENSIONS.includes(ext)) return true;
-		}
-
-		const fileButtons = composerRoot.querySelectorAll('button[aria-label]');
-		for (const btn of fileButtons) {
-			if (TEXT_FILE_LABEL_PATTERN.test(btn.getAttribute('aria-label') || '')) return true;
+		const candidates = composerRoot.querySelectorAll('*');
+		for (const node of candidates) {
+			const names = getAttachmentNames(node);
+			if (names.some((name) => isImageAttachment(name) || isTextAttachment(name))) return true;
+			const label = node.getAttribute?.('aria-label') || node.getAttribute?.('title') || node.getAttribute?.('data-name') || node.getAttribute?.('data-filename') || node.textContent || '';
+			if (hasTextDocumentLabel(label)) return true;
 		}
 
 		return false;
 	}
 
+	// Add token cost for all supported attachments while ignoring unsupported binary-only files.
 	async function estimateAttachmentTokens(composerRoot) {
 		if (!composerRoot) return 0;
+
 		let total = 0;
-
-		const imgElements = composerRoot.querySelectorAll('img[alt]');
 		const imageTokenPromises = [];
+		const seenNames = new Set();
 
-		for (const img of imgElements) {
-			const ext = getFileExtension(img.getAttribute('alt'));
-			if (ext === 'pdf') {
-				total += CC.CONST.PDF_TOKEN_ESTIMATE;
-			} else if (ext === 'docx') {
-				total += CC.CONST.DOCX_TOKEN_ESTIMATE;
-			} else if (IMAGE_EXTENSIONS.includes(ext)) {
-				imageTokenPromises.push(estimateImageTokens(img, img.getAttribute('alt')));
+		const rootText = composerRoot.textContent || '';
+		for (const record of parseTextAttachmentRecords(rootText)) {
+			if (seenNames.has(record.name)) continue;
+			seenNames.add(record.name);
+			if (!isTextAttachment(record.name)) continue;
+			if (record.lineCount !== null && record.lineCount !== undefined) {
+				total += record.lineCount * CC.CONST.TEXT_FILE_TOKENS_PER_LINE;
+			}
+		}
+
+		const candidates = composerRoot.querySelectorAll('*');
+		for (const node of candidates) {
+			const names = getAttachmentNames(node);
+			for (const name of names) {
+				if (seenNames.has(name)) continue;
+				seenNames.add(name);
+
+				if (isImageAttachment(name)) {
+					const img = node.tagName === 'IMG' ? node : node.closest?.('img');
+					if (img) imageTokenPromises.push(estimateImageTokens(img, name));
+					continue;
+				}
+
+				if (isTextAttachment(name)) {
+					const label = node.getAttribute?.('aria-label') || node.getAttribute?.('title') || node.getAttribute?.('data-name') || node.getAttribute?.('data-filename') || node.textContent || '';
+					const lineCount = getTextAttachmentLineCount(label, name) ?? getTextLineCount(label);
+					if (lineCount !== null) {
+						total += lineCount * CC.CONST.TEXT_FILE_TOKENS_PER_LINE;
+					}
+				}
 			}
 		}
 
 		const imageTokenResults = await Promise.all(imageTokenPromises);
 		for (const tokens of imageTokenResults) total += tokens;
 
-		const fileButtons = composerRoot.querySelectorAll('button[aria-label]');
-		for (const btn of fileButtons) {
-			const label = btn.getAttribute('aria-label') || '';
-			const match = label.match(TEXT_FILE_LABEL_PATTERN);
-			if (match) {
-				const lineCount = parseInt(match[1], 10);
-				if (Number.isFinite(lineCount)) {
-					total += lineCount * CC.CONST.TEXT_FILE_TOKENS_PER_LINE;
-				}
-			}
-		}
-
 		return total;
 	}
 
+	// Combine the draft text and attachment costs into a single prompt estimate.
 	async function estimatePrompt(chatInput, composerRoot) {
 		const text = chatInput?.textContent || '';
 		const textTokens = CC.tokens.countTokens(text);

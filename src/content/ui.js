@@ -152,8 +152,8 @@
 			this.sessionWindowStartMs = null;
 			this.weeklyWindowStartMs = null;
 			this.refreshingUsage = false;
-			this.lastSessionPct = null; // NEW: cached session percent, needed to re-render text when toggling prompt estimate mode
-			this.promptEstimateTokens = null; // NEW: non-null while the prompt estimate should replace the reset timer
+			this.lastSessionPct = null;
+			this.promptEstimateTokens = null;
 
 			// Notification bell
 			this.notificationBell = null;
@@ -630,8 +630,7 @@
 			this.headerContainer.appendChild(this.headerDisplay);
 		}
 
-		// NEW: builds the session usage line text. Shows "· Token Est: N" instead
-		// of "· resets in ..." whenever a prompt estimate is active.
+		// Render the session summary, preferring the prompt estimate whenever it is active.
 		_renderSessionUsageText() {
 			const hasPct = typeof this.lastSessionPct === 'number';
 
@@ -650,8 +649,7 @@
 			this.sessionUsageSpan.textContent = `Session: ${this.lastSessionPct}%${resetText}`;
 		}
 
-		// NEW: called by main.js whenever the draft prompt's estimated token
-		// count changes. Pass null to revert back to the reset countdown.
+		// Update the token estimate shown in the session row; null falls back to the reset timer.
 		setPromptEstimate(tokenCount) {
 			this.promptEstimateTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) ? tokenCount : null;
 			this._renderSessionUsageText();
@@ -670,12 +668,10 @@
 				const pct = Math.round(rawPct * 10) / 10;
 				this.sessionResetMs = session.resets_at ? Date.parse(session.resets_at) : null;
 				this.sessionWindowStartMs = this.sessionResetMs ? this.sessionResetMs - 5 * 60 * 60 * 1000 : null;
-				this.lastSessionPct = pct; // NEW: cache percent so _renderSessionUsageText() can rebuild the text later
-				this._renderSessionUsageText(); // MODIFIED: was a direct textContent assignment, now delegates to the shared renderer
+				this.lastSessionPct = pct;
+				this._renderSessionUsageText();
 
-				//Calculation for the estimated tokens used.
 				const estimatedTokensUsed = Math.round((rawPct/100) * CC.CONST.CONTEXT_LIMIT_TOKENS);
-				//Update the tooltip text to show the estimated tokens used and the context limit.
 				if (this.sessionTooltip) {
 					this.sessionTooltip.textContent = `5-hour usage Window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
 				}
@@ -685,8 +681,8 @@
 				this.sessionBarFill.classList.toggle('cc-warn', width >= 90);
 				this.sessionBarFill.classList.toggle('cc-full', width >= 99.5);
 			} else {
-				this.lastSessionPct = null; // NEW: no session data, clear cached percent
-				this._renderSessionUsageText(); // MODIFIED: was a direct textContent assignment, now delegates to the shared renderer
+				this.lastSessionPct = null;
+				this._renderSessionUsageText();
 				this.sessionBarFill.style.width = '0%';
 				this.sessionBarFill.classList.remove('cc-warn', 'cc-full');
 				this.sessionResetMs = null;
@@ -750,7 +746,7 @@
 		}
 
 		tick() {
-			// Cache countdown
+			// Refresh countdowns and timers without re-reading the server state.
 			const now = Date.now();
 			if (this.lastCachedUntilMs && this.lastCachedUntilMs > now) {
 				const secondsLeft = Math.max(0, Math.ceil((this.lastCachedUntilMs - now) / 1000));
@@ -765,8 +761,7 @@
 				this._renderHeader();
 			}
 
-			// Reset countdown text + time markers
-			this._renderSessionUsageText(); // MODIFIED: was substring-search based, now delegates to the shared renderer (handles prompt-estimate mode too)
+			this._renderSessionUsageText();
 
 			if (this.weeklyResetMs && this.weeklyUsageSpan?.textContent) {
 				const idx = this.weeklyUsageSpan.textContent.indexOf('· resets in');
