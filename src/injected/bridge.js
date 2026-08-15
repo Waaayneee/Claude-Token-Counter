@@ -3,16 +3,19 @@
 
 	const CC_MARKER = 'ClaudeCounter';
 
+	// Preserve the original fetch implementation so the bridge can wrap Claude requests without breaking page behavior.
 	const originalFetch = window.fetch;
 	const originalPushState = history.pushState.bind(history);
 	const originalReplaceState = history.replaceState.bind(history);
 
+	// Dispatch a URL-change event whenever the page history updates so the content script can rebind UI widgets.
 	history.pushState = function (...args) {
 		const result = originalPushState(...args);
 		window.dispatchEvent(new CustomEvent('cc:urlchange'));
 		return result;
 	};
 
+	// Dispatch a URL-change event whenever the page history updates so the content script can rebind UI widgets.
 	history.replaceState = function (...args) {
 		const result = originalReplaceState(...args);
 		window.dispatchEvent(new CustomEvent('cc:urlchange'));
@@ -46,10 +49,12 @@
 		return response;
 	};
 
+	// Post a message to the extension side of the bridge using the page’s window message channel.
 	function post(type, payload) {
 		window.postMessage({ cc: CC_MARKER, type, payload }, '*');
 	}
 
+	// Send the result of a bridge request back to the caller with a success flag and payload or error.
 	function postResponse(requestId, ok, payload, error) {
 		window.postMessage(
 			{
@@ -64,6 +69,7 @@
 		);
 	}
 
+	// Convert relative URLs into the Claude origin so the extension can inspect the same requests the page makes.
 	function toAbsoluteUrl(input) {
 		if (typeof input === 'string') {
 			if (input.startsWith('/')) return `https://claude.ai${input}`;
@@ -74,11 +80,13 @@
 		return '';
 	}
 
+	// Extract the org and conversation IDs from the tree-fetch URL so metadata requests can be routed correctly.
 	function getConversationMeta(url) {
 		const match = url.match(/^https:\/\/claude\.ai\/api\/organizations\/([^/]+)\/chat_conversations\/([^/?]+)/);
 		return match ? { orgId: match[1], conversationId: match[2] } : null;
 	}
 
+	// Parse the fetched conversation tree and forward it to the content script as a structured payload.
 	async function handleConversationResponse({ orgId, conversationId }, response) {
 		try {
 			const cloned = response.clone();
@@ -89,6 +97,7 @@
 		}
 	}
 
+	// Read server-sent events and forward usage-limit updates to the extension while leaving the page response stream intact.
 	async function handleEventStream(response) {
 		try {
 			const cloned = response.clone();
@@ -123,6 +132,7 @@
 		}
 	}
 
+	// Handle extension requests for usage, conversation metadata, and digest hashing over the page’s message bridge.
 	window.addEventListener('message', async (event) => {
 		if (event.source !== window) return;
 		const data = event.data;

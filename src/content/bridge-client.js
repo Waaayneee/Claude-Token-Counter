@@ -3,19 +3,23 @@
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
+	// Return the browser runtime API so the extension can talk to the injected bridge.
 	function getRuntime() {
 		return globalThis.browser?.runtime || globalThis.chrome?.runtime || null;
 	}
 
+	// Build a unique request ID for a bridge call so responses can be matched reliably.
 	function makeRequestId() {
 		return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	}
 
 	class BridgeClient {
+		// Track pending requests and listener callbacks, then wire the message bridge to window events.
 		constructor() {
 			this._pending = new Map();
 			this._listeners = new Map();
 
+			// Receive bridge responses and route them to the matching pending request or listener.
 			window.addEventListener('message', (event) => {
 				if (event.source !== window) return;
 				const data = event.data;
@@ -45,6 +49,7 @@
 			}
 		}
 
+		// Register a callback for a specific bridge event type.
 		on(type, fn) {
 			if (!this._listeners.has(type)) this._listeners.set(type, new Set());
 			this._listeners.get(type).add(fn);
@@ -74,14 +79,17 @@
 			});
 		}
 
+		// Request the current usage snapshot for a specific org.
 		async requestUsage(orgId) {
 			return this.request('usage', { orgId }, { timeoutMs: 15000 });
 		}
 
+		// Request the conversation tree for a chat so the UI can display token usage from that session.
 		async requestConversation(orgId, conversationId) {
 			return this.request('conversation', { orgId, conversationId }, { timeoutMs: 20000 });
 		}
 
+		// Hash a text payload so the token cache can detect unchanged content.
 		async requestHash(text) {
 			return this.request('hash', { text }, { timeoutMs: 5000 });
 		}
