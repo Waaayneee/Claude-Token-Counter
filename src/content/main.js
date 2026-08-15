@@ -156,7 +156,7 @@
 
 			if (Notification.permission === 'granted') {
 				new Notification(title, {
-					icon: '/icons/icon-128.png',
+					icon: '/icons/icon128.png',
 					...options
 				});
 			}
