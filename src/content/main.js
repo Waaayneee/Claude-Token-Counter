@@ -69,9 +69,7 @@
 			}
 		};
 
-		// Listen for custom event from bridge (history methods wrapped early)
 		window.addEventListener('cc:urlchange', fireIfChanged);
-		// Also popstate for back/forward buttons
 		window.addEventListener('popstate', fireIfChanged);
 
 		return () => {
@@ -121,13 +119,12 @@
 	let currentConversationId = null;
 	let currentOrgId = null;
 
-	// NEW: prompt token estimator state
 	let promptComposerObserver = null;
 	let promptEstimateDebounceId = null;
 	let promptEstimateRequestId = 0;
 
-	let usageState = null; // last snapshot
-	let usageResetMs = { five_hour: null, seven_day: null }; // cached parsed timestamps
+	let usageState = null;
+	let usageResetMs = { five_hour: null, seven_day: null };
 	let lastUsageSseMs = 0;
 	let usageFetchInFlight = false;
 	let lastUsageUpdateMs = 0;
@@ -135,7 +132,6 @@
 
 	const ui = new CC.ui.CounterUI({
 		onUsageRefresh: async () => {
-			// ask for notification permission if not already granted or denied
 			if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
 				Notification.requestPermission();
 			}
@@ -144,32 +140,26 @@
 	});
 	ui.initialize();
 
-	// Bridge must be ready before we can make requests
 	const bridgeReady = CC.injectBridgeOnce();
 
 	function sendNotification(title, options = {}) {
-		// Only send if notifications are enabled
 		if (!ui.notificationsEnabled) return;
 		
-		// Check if browser supports Notification API
 		if (!('Notification' in window)) return;
 
 		try {
-			// Request permission if not already granted
 			if (Notification.permission === 'default') {
 				Notification.requestPermission();
-				return; // Don't send yet, wait for user permission
+				return;
 			}
 
 			if (Notification.permission === 'granted') {
-				// Send browser notification
 				new Notification(title, {
-					icon: '/icons/icon-128.png', // Adjust path if needed
+					icon: '/icons/icon-128.png',
 					...options
 				});
 			}
 		} catch (error) {
-			// Silently fail if notification fails
 		}
 	}
 
@@ -179,7 +169,6 @@
 		usageState = normalized;
 		lastUsageUpdateMs = now;
 		if (source === 'sse') lastUsageSseMs = now;
-		// Cache parsed timestamps to avoid Date.parse() every tick
 		usageResetMs.five_hour = normalized.five_hour?.resets_at ? Date.parse(normalized.five_hour.resets_at) : null;
 		usageResetMs.seven_day = normalized.seven_day?.resets_at ? Date.parse(normalized.seven_day.resets_at) : null;
 		ui.setUsage(normalized);
@@ -226,7 +215,6 @@
 		try {
 			await CC.bridge.requestConversation(orgId, currentConversationId);
 		} catch {
-			// ignore
 		}
 	}
 
@@ -253,13 +241,6 @@
 	CC.bridge.on('cc:conversation', handleConversationPayload);
 	CC.bridge.on('cc:message_limit', handleMessageLimit);
 
-	// NEW: recomputes the draft prompt token estimate and pushes it to the UI.
-	// Reverts to the reset countdown when there's no text and no attachments.
-	// MODIFIED: re-queries the live chat input and recomputes a fresh scoped
-	// composer root on every call, instead of trusting cached references.
-	// Claude replaces the input element after sending a message, so a cached
-	// reference goes stale and keeps reporting old (non-empty) text/attachments
-	// forever, which was why the estimate never reset.
 	async function runPromptEstimate() {
 		const chatInput = document.querySelector(CC.DOM.CHAT_INPUT);
 		if (!chatInput) {
@@ -276,16 +257,16 @@
 		if (isTextEmpty && !attachmentsPresent) {
 			promptEstimateRequestId += 1;
 			ui.setPromptEstimate(null);
+			CC.promptEstimator.resetImageTokenCache();
 			return;
 		}
 
 		const requestId = ++promptEstimateRequestId;
 		const totalTokens = await CC.promptEstimator.estimatePrompt(chatInput, composerRoot);
-		if (requestId !== promptEstimateRequestId) return; // stale result (input/attachments changed again mid-estimate)
+		if (requestId !== promptEstimateRequestId) return;
 		ui.setPromptEstimate(totalTokens);
 	}
 
-	// NEW: debounces runPromptEstimate so it doesn't run on every keystroke/DOM mutation.
 	function scheduleRunPromptEstimate() {
 		if (promptEstimateDebounceId) clearTimeout(promptEstimateDebounceId);
 		promptEstimateDebounceId = setTimeout(() => {
@@ -294,12 +275,6 @@
 		}, CC.CONST.PROMPT_ESTIMATE_DEBOUNCE_MS);
 	}
 
-	// NEW: attaches the input listener to a chat-input element, and (once) a
-	// broad document.body observer that both re-attaches after Claude swaps
-	// in a fresh input element and schedules re-estimates on any DOM change.
-	// MODIFIED: the observer now watches document.body (broad, so no mutation
-	// is ever missed) instead of the narrow composer root, since the narrow
-	// root is now recomputed fresh inside runPromptEstimate() on every call.
 	function attachPromptEstimatorListeners(chatInput) {
 		if (!chatInput || chatInput.hasAttribute('data-cc-prompt-estimator')) return;
 		chatInput.setAttribute('data-cc-prompt-estimator', 'true');
@@ -323,8 +298,6 @@
 	async function handleUrlChange() {
 		currentConversationId = getConversationId();
 
-		// Attach usage line and header independently - they have different anchor elements
-		// and CHAT_MENU_TRIGGER doesn't exist on home/new pages
 		waitForElement(CC.DOM.MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
 			if (el) ui.attachUsageLine();
 		});
@@ -332,7 +305,7 @@
 			if (el) ui.attachHeader();
 		});
 		waitForElement(CC.DOM.CHAT_INPUT, 60000).then((el) => {
-			if (el) attachPromptEstimatorListeners(el); // NEW: wire up the prompt token estimator once the input exists
+			if (el) attachPromptEstimatorListeners(el);
 		});
 
 		if (!currentConversationId) {
@@ -340,26 +313,22 @@
 			return;
 		}
 
-		// Best-effort orgId from cookie.
 		updateOrgIdIfNeeded(getOrgIdFromCookie());
 
 		await refreshConversation();
 
-		// Usage is org-level, not conversation-level. Only fetch on first load or if stale.
 		if (!usageState) await refreshUsage();
 	}
 
 	const unobserveUrl = observeUrlChanges(handleUrlChange);
 	window.addEventListener('beforeunload', unobserveUrl);
 
-	// Refresh on branch navigation - watch for the branch indicator to change
 	let branchObserver = null;
 	document.addEventListener('click', (e) => {
 		if (!currentConversationId) return;
 		const btn = e.target.closest('button[aria-label="Previous"], button[aria-label="Next"]');
 		if (!btn) return;
 
-		// Find the branch indicator span (matches "X / Y" pattern) near the clicked button
 		const container = btn.closest('.inline-flex');
 		const spans = container?.querySelectorAll('span') || [];
 		const indicator = Array.from(spans).find((s) => /^\d+\s*\/\s*\d+$/.test(s.textContent.trim()));
@@ -367,10 +336,8 @@
 
 		const originalText = indicator.textContent;
 
-		// Clean up any existing observer
 		if (branchObserver) branchObserver.disconnect();
 
-		// Watch for the indicator text to change (with cleanup timeout)
 		branchObserver = new MutationObserver(() => {
 			if (indicator.textContent !== originalText) {
 				branchObserver.disconnect();
@@ -381,7 +348,6 @@
 
 		branchObserver.observe(indicator, { childList: true, characterData: true, subtree: true });
 
-		// Clean up if nothing changes after 60 seconds
 		setTimeout(() => {
 			if (branchObserver) {
 				branchObserver.disconnect();
@@ -390,18 +356,15 @@
 		}, 60000);
 	});
 
-	// Initial attach + fetches
 	handleUrlChange();
 
 	function tick() {
 		ui.tick();
 
-		// Refresh usage when a window ends (5h / 7d). SSE won't fire at rollover unless a message is sent.
 		const now = Date.now();
 
 		if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
 			rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
-			// Notify user that 5-hour usage window has reset
 			const isNotificationsEnabled = localStorage.getItem('cc-notifications-enabled') === 'true';
 			if (isNotificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
 				new Notification('Claude session reset', {
@@ -414,15 +377,12 @@
 
 		if (usageResetMs.seven_day && now >= usageResetMs.seven_day && rolloverHandledForResetMs.seven_day !== usageResetMs.seven_day) {
 			rolloverHandledForResetMs.seven_day = usageResetMs.seven_day;
-			// TODO: ADD NOTIFICATION FEATURE HERE - Notify user that 7-day usage window has reset
-			// im ngl idk if people would even need this
 			sendNotification('7-day usage window reset', {
 				body: 'Your 7-day usage window has reset. You can now make new requests.'
 			});
 			refreshUsage();
 		}
 
-		// Optional hourly safety refresh.
 		const ONE_HOUR_MS = 60 * 60 * 1000;
 		const sseAge = now - lastUsageSseMs;
 		const anyAge = now - lastUsageUpdateMs;
@@ -431,6 +391,5 @@
 		}
 	}
 
-	// Keep countdowns + markers updated.
 	setInterval(tick, 1000);
 })();

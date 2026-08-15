@@ -8,19 +8,20 @@
 		MODEL_SELECTOR_DROPDOWN: '[data-testid="model-selector-dropdown"]',
 		CHAT_PROJECT_WRAPPER: '.chat-project-wrapper',
 		BRIDGE_SCRIPT_ID: 'cc-bridge-script',
-		CHAT_INPUT: '[data-testid="chat-input"]', // NEW: prompt textbox used by prompt-estimator.js
-		ADD_ATTACHMENT_BUTTON: '[aria-label="Add files, connectors, and more"]' // NEW: used to locate the composer root
+		CHAT_INPUT: '[data-testid="chat-input"]',
+		ADD_ATTACHMENT_BUTTON: '[aria-label="Add files, connectors, and more"]'
 	});
 
 	CC.CONST = Object.freeze({
 		CACHE_WINDOW_MS: 5 * 60 * 1000,
 		CONTEXT_LIMIT_TOKENS: 200000,
-		PROMPT_ESTIMATE_DEBOUNCE_MS: 300, // NEW: debounce delay for the prompt token estimator
-		IMAGE_TOKEN_DIVISOR: 750, // NEW: width * height / 750, per Anthropic's rough public image token formula
-		IMAGE_TOKEN_FALLBACK: 1600, // NEW: used only if natural dimensions can't be read at all, tunable
-		PDF_TOKEN_ESTIMATE: 12000, // NEW: flat estimate per PDF, sized for a typical multi-page document, tunable
-		DOCX_TOKEN_ESTIMATE: 6000, // NEW: flat estimate per Word document, tunable
-		TEXT_FILE_TOKENS_PER_LINE: 7, // NEW: ~25-35 chars/line at ~4 chars/token for code, tunable
+		PROMPT_ESTIMATE_DEBOUNCE_MS: 300,
+		IMAGE_TOKEN_DIVISOR: 750,
+		IMAGE_LONG_EDGE_CAP: 1568,
+		IMAGE_TOKEN_FALLBACK: 1600,
+		PDF_TOKEN_ESTIMATE: 12000,
+		DOCX_TOKEN_ESTIMATE: 6000,
+		TEXT_FILE_TOKENS_PER_LINE: 7,
 	});
 
 	CC.COLORS = Object.freeze({
