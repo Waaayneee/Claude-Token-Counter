@@ -206,5 +206,5 @@
 		};
 	}
 
-	CC.tokens = { computeConversationMetrics, countTokens }; // NEW: token estimate uses the shared tokenizer count helper
+	CC.tokens = { computeConversationMetrics, countTokens }; // MODIFIED: added countTokens export for prompt-estimator.js
 })();

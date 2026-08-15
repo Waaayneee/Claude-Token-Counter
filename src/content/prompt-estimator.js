@@ -1,10 +1,13 @@
-// NEW: token estimate - estimates the current draft prompt cost from DOM text and attachment chips.
+// NEW FILE: prompt-estimator.js
+// Estimates the token cost of the current draft prompt (typed text + attached
+// files) using DOM inspection only, no raw File object access.
 (() => {
 	'use strict';
 
 	const CC = (globalThis.ClaudeCounter = globalThis.ClaudeCounter || {});
 
 	const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+	const DOCUMENT_EXTENSIONS = ['pdf', 'docx']; // NEW: document-style attachments, flat-estimated (no line count available)
 	const TEXT_FILE_LABEL_PATTERN = /,\s*(\d+)\s*lines?$/i;
 
 	function getFileExtension(filename) {
@@ -13,22 +16,34 @@
 		return match ? match[1].toLowerCase() : '';
 	}
 
-	// NEW: token estimate - finds the smallest composer ancestor that contains the attachment button.
+	// MODIFIED: document.body was too broad, it also scanned attachment
+	// thumbnails from already-sent messages in the chat history, so the
+	// estimate never reset to null after the first file was sent. This scan
+	// root must stay narrow (composer only). Broad DOM-change detection is
+	// handled separately in main.js via a document.body observer instead.
+	// Preference order: the semantic <form> boundary (most reliable, forms
+	// don't span into message history) → the attach-button ancestor climbed
+	// a few extra levels (attachment thumbnails render just outside it) →
+	// document.body as a last resort only.
 	function findComposerRoot(chatInput) {
+		const form = chatInput.closest('form');
+		if (form) return form;
+
 		const addButton = document.querySelector(CC.DOM.ADD_ATTACHMENT_BUTTON);
-		if (!addButton) {
-			return chatInput.closest('form') || chatInput.parentElement?.parentElement?.parentElement || document.body;
+		if (addButton) {
+			let node = chatInput;
+			while (node) {
+				if (node.contains(addButton)) {
+					for (let i = 0; i < 3 && node.parentElement; i++) node = node.parentElement;
+					return node;
+				}
+				node = node.parentElement;
+			}
 		}
 
-		let node = chatInput;
-		while (node) {
-			if (node.contains(addButton)) return node;
-			node = node.parentElement;
-		}
 		return document.body;
 	}
 
-	// NEW: token estimate - approximates image tokens from natural dimensions.
 	function estimateImageTokens(imgEl) {
 		return new Promise((resolve) => {
 			const compute = () => {
@@ -50,14 +65,15 @@
 		});
 	}
 
-	// NEW: token estimate - checks whether attachments are present without waiting on async image loads.
+	// Quick synchronous check used to decide whether to show or hide the
+	// estimate, without waiting on async image dimension loads.
 	function hasAnyAttachment(composerRoot) {
 		if (!composerRoot) return false;
 
 		const imgElements = composerRoot.querySelectorAll('img[alt]');
 		for (const img of imgElements) {
 			const ext = getFileExtension(img.getAttribute('alt'));
-			if (ext === 'pdf' || IMAGE_EXTENSIONS.includes(ext)) return true;
+			if (DOCUMENT_EXTENSIONS.includes(ext) || IMAGE_EXTENSIONS.includes(ext)) return true; // MODIFIED: was a hardcoded 'pdf' check
 		}
 
 		const fileButtons = composerRoot.querySelectorAll('button[aria-label]');
@@ -68,11 +84,10 @@
 		return false;
 	}
 
-	// NEW: token estimate - sums attachment tokens from images, PDFs, and text-file line counts.
 	async function estimateAttachmentTokens(composerRoot) {
 		if (!composerRoot) return 0;
-
 		let total = 0;
+
 		const imgElements = composerRoot.querySelectorAll('img[alt]');
 		const imageTokenPromises = [];
 
@@ -80,6 +95,8 @@
 			const ext = getFileExtension(img.getAttribute('alt'));
 			if (ext === 'pdf') {
 				total += CC.CONST.PDF_TOKEN_ESTIMATE;
+			} else if (ext === 'docx') {
+				total += CC.CONST.DOCX_TOKEN_ESTIMATE; // NEW
 			} else if (IMAGE_EXTENSIONS.includes(ext)) {
 				imageTokenPromises.push(estimateImageTokens(img));
 			}
@@ -103,7 +120,6 @@
 		return total;
 	}
 
-	// NEW: token estimate - combines prompt text tokens with attachment tokens.
 	async function estimatePrompt(chatInput, composerRoot) {
 		const text = chatInput?.textContent || '';
 		const textTokens = CC.tokens.countTokens(text);

@@ -152,8 +152,8 @@
 			this.sessionWindowStartMs = null;
 			this.weeklyWindowStartMs = null;
 			this.refreshingUsage = false;
-			this.lastSessionPct = null; // NEW: token estimate keeps the session percent available for re-rendering
-			this.promptEstimateTokens = null; // NEW: token estimate replaces the reset countdown when draft text is present
+			this.lastSessionPct = null; // NEW: cached session percent, needed to re-render text when toggling prompt estimate mode
+			this.promptEstimateTokens = null; // NEW: non-null while the prompt estimate should replace the reset timer
 
 			// Notification bell
 			this.notificationBell = null;
@@ -630,13 +630,14 @@
 			this.headerContainer.appendChild(this.headerDisplay);
 		}
 
-		// NEW: token estimate - renders the session row text for either reset countdown or prompt estimate mode.
+		// NEW: builds the session usage line text. Shows "· Token Est: N" instead
+		// of "· resets in ..." whenever a prompt estimate is active.
 		_renderSessionUsageText() {
 			const hasPct = typeof this.lastSessionPct === 'number';
 
 			if (this.promptEstimateTokens !== null) {
 				const prefix = hasPct ? `Session: ${this.lastSessionPct}% · ` : '';
-				this.sessionUsageSpan.textContent = `${prefix}Prompt Cost: ${this.promptEstimateTokens.toLocaleString()}`;
+				this.sessionUsageSpan.textContent = `${prefix}Token Est: ${this.promptEstimateTokens.toLocaleString()}`;
 				return;
 			}
 
@@ -645,11 +646,12 @@
 				return;
 			}
 
-			const resetText = this.sessionResetMs ? ` · Resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
+			const resetText = this.sessionResetMs ? ` · resets in ${formatResetCountdown(this.sessionResetMs)}` : '';
 			this.sessionUsageSpan.textContent = `Session: ${this.lastSessionPct}%${resetText}`;
 		}
 
-		// NEW: token estimate - updates the session row with the current draft token total or clears it.
+		// NEW: called by main.js whenever the draft prompt's estimated token
+		// count changes. Pass null to revert back to the reset countdown.
 		setPromptEstimate(tokenCount) {
 			this.promptEstimateTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) ? tokenCount : null;
 			this._renderSessionUsageText();
@@ -668,14 +670,14 @@
 				const pct = Math.round(rawPct * 10) / 10;
 				this.sessionResetMs = session.resets_at ? Date.parse(session.resets_at) : null;
 				this.sessionWindowStartMs = this.sessionResetMs ? this.sessionResetMs - 5 * 60 * 60 * 1000 : null;
-				this.lastSessionPct = pct; // NEW: token estimate needs the current session percent for its prefix
-				this._renderSessionUsageText(); // NEW: token estimate keeps the session row text in one shared renderer
-				
+				this.lastSessionPct = pct; // NEW: cache percent so _renderSessionUsageText() can rebuild the text later
+				this._renderSessionUsageText(); // MODIFIED: was a direct textContent assignment, now delegates to the shared renderer
+
 				//Calculation for the estimated tokens used.
 				const estimatedTokensUsed = Math.round((rawPct/100) * CC.CONST.CONTEXT_LIMIT_TOKENS);
 				//Update the tooltip text to show the estimated tokens used and the context limit.
 				if (this.sessionTooltip) {
-					this.sessionTooltip.textContent = `5-hour usage window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
+					this.sessionTooltip.textContent = `5-hour usage Window.\nTokens Used: ${estimatedTokensUsed.toLocaleString()} / ${CC.CONST.CONTEXT_LIMIT_TOKENS.toLocaleString()} tokens.\nThe bar shows your usage.\nThe line marks where you are in the window.`;
 				}
 
 				const width = Math.max(0, Math.min(100, rawPct));
@@ -683,8 +685,8 @@
 				this.sessionBarFill.classList.toggle('cc-warn', width >= 90);
 				this.sessionBarFill.classList.toggle('cc-full', width >= 99.5);
 			} else {
-				this.lastSessionPct = null; // NEW: token estimate clears the cached percent when session usage is missing
-				this._renderSessionUsageText(); // NEW: token estimate keeps the session row text in one shared renderer
+				this.lastSessionPct = null; // NEW: no session data, clear cached percent
+				this._renderSessionUsageText(); // MODIFIED: was a direct textContent assignment, now delegates to the shared renderer
 				this.sessionBarFill.style.width = '0%';
 				this.sessionBarFill.classList.remove('cc-warn', 'cc-full');
 				this.sessionResetMs = null;
@@ -703,7 +705,7 @@
 				const pct = Math.round(rawPct * 10) / 10;
 				this.weeklyResetMs = weekly.resets_at ? Date.parse(weekly.resets_at) : null;
 				this.weeklyWindowStartMs = this.weeklyResetMs ? this.weeklyResetMs - 7 * 24 * 60 * 60 * 1000 : null;
-				const resetText = this.weeklyResetMs ? ` · Resets in ${formatResetCountdown(this.weeklyResetMs)}` : '';
+				const resetText = this.weeklyResetMs ? ` · resets in ${formatResetCountdown(this.weeklyResetMs)}` : '';
 				this.weeklyUsageSpan.textContent = `Weekly: ${pct}%${resetText}`;
 
 				const width = Math.max(0, Math.min(100, rawPct));
@@ -763,14 +765,13 @@
 				this._renderHeader();
 			}
 
-			// NEW: token estimate - refreshes the session row text without disturbing prompt estimate mode.
-			this._renderSessionUsageText();
-
 			// Reset countdown text + time markers
+			this._renderSessionUsageText(); // MODIFIED: was substring-search based, now delegates to the shared renderer (handles prompt-estimate mode too)
+
 			if (this.weeklyResetMs && this.weeklyUsageSpan?.textContent) {
-				const idx = this.weeklyUsageSpan.textContent.indexOf('· Resets in');
+				const idx = this.weeklyUsageSpan.textContent.indexOf('· resets in');
 				if (idx !== -1) {
-					const prefix = this.weeklyUsageSpan.textContent.slice(0, idx + '· Resets in '.length);
+					const prefix = this.weeklyUsageSpan.textContent.slice(0, idx + '· resets in '.length);
 					this.weeklyUsageSpan.textContent = `${prefix}${formatResetCountdown(this.weeklyResetMs)}`;
 				}
 			}

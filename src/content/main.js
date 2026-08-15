@@ -27,7 +27,6 @@
 	 * @param {string} selector - CSS selector
 	 * @param {number} [timeoutMs] - Optional timeout in ms. Returns null if timeout expires.
 	 */
-	
 	function waitForElement(selector, timeoutMs) {
 		return new Promise((resolve) => {
 			const existing = document.querySelector(selector);
@@ -122,11 +121,8 @@
 	let currentConversationId = null;
 	let currentOrgId = null;
 
-	// NEW: token estimate state for the active composer input and its debounced refresh cycle.
-	let promptChatInput = null;
-	let promptComposerRoot = null;
+	// NEW: prompt token estimator state
 	let promptComposerObserver = null;
-	let promptInputObserver = null;
 	let promptEstimateDebounceId = null;
 	let promptEstimateRequestId = 0;
 
@@ -257,13 +253,25 @@
 	CC.bridge.on('cc:conversation', handleConversationPayload);
 	CC.bridge.on('cc:message_limit', handleMessageLimit);
 
-	// NEW: token estimate - recomputes the draft token total and writes it into the UI.
+	// NEW: recomputes the draft prompt token estimate and pushes it to the UI.
+	// Reverts to the reset countdown when there's no text and no attachments.
+	// MODIFIED: re-queries the live chat input and recomputes a fresh scoped
+	// composer root on every call, instead of trusting cached references.
+	// Claude replaces the input element after sending a message, so a cached
+	// reference goes stale and keeps reporting old (non-empty) text/attachments
+	// forever, which was why the estimate never reset.
 	async function runPromptEstimate() {
-		if (!promptChatInput || !promptComposerRoot) return;
+		const chatInput = document.querySelector(CC.DOM.CHAT_INPUT);
+		if (!chatInput) {
+			promptEstimateRequestId += 1;
+			ui.setPromptEstimate(null);
+			return;
+		}
 
-		const text = promptChatInput.textContent || '';
+		const composerRoot = CC.promptEstimator.findComposerRoot(chatInput);
+		const text = chatInput.textContent || '';
 		const isTextEmpty = text.trim().length === 0;
-		const attachmentsPresent = CC.promptEstimator.hasAnyAttachment(promptComposerRoot);
+		const attachmentsPresent = CC.promptEstimator.hasAnyAttachment(composerRoot);
 
 		if (isTextEmpty && !attachmentsPresent) {
 			promptEstimateRequestId += 1;
@@ -272,12 +280,12 @@
 		}
 
 		const requestId = ++promptEstimateRequestId;
-		const totalTokens = await CC.promptEstimator.estimatePrompt(promptChatInput, promptComposerRoot);
-		if (requestId !== promptEstimateRequestId) return; // stale result if the composer changed mid-estimate
+		const totalTokens = await CC.promptEstimator.estimatePrompt(chatInput, composerRoot);
+		if (requestId !== promptEstimateRequestId) return; // stale result (input/attachments changed again mid-estimate)
 		ui.setPromptEstimate(totalTokens);
 	}
 
-	// NEW: token estimate - debounces DOM/input changes so the estimator doesn't run on every mutation.
+	// NEW: debounces runPromptEstimate so it doesn't run on every keystroke/DOM mutation.
 	function scheduleRunPromptEstimate() {
 		if (promptEstimateDebounceId) clearTimeout(promptEstimateDebounceId);
 		promptEstimateDebounceId = setTimeout(() => {
@@ -286,29 +294,30 @@
 		}, CC.CONST.PROMPT_ESTIMATE_DEBOUNCE_MS);
 	}
 
-	// NEW: token estimate - wires the prompt input and composer observer once per chat input element.
+	// NEW: attaches the input listener to a chat-input element, and (once) a
+	// broad document.body observer that both re-attaches after Claude swaps
+	// in a fresh input element and schedules re-estimates on any DOM change.
+	// MODIFIED: the observer now watches document.body (broad, so no mutation
+	// is ever missed) instead of the narrow composer root, since the narrow
+	// root is now recomputed fresh inside runPromptEstimate() on every call.
 	function attachPromptEstimatorListeners(chatInput) {
 		if (!chatInput || chatInput.hasAttribute('data-cc-prompt-estimator')) return;
 		chatInput.setAttribute('data-cc-prompt-estimator', 'true');
 
-		promptChatInput = chatInput;
-		promptComposerRoot = CC.promptEstimator.findComposerRoot(chatInput);
-
 		chatInput.addEventListener('input', scheduleRunPromptEstimate);
 
-		if (promptComposerObserver) promptComposerObserver.disconnect();
-		promptComposerObserver = new MutationObserver(scheduleRunPromptEstimate);
-		promptComposerObserver.observe(promptComposerRoot, { childList: true, subtree: true });
+		if (!promptComposerObserver) {
+			promptComposerObserver = new MutationObserver(() => {
+				const liveChatInput = document.querySelector(CC.DOM.CHAT_INPUT);
+				if (liveChatInput && !liveChatInput.hasAttribute('data-cc-prompt-estimator')) {
+					attachPromptEstimatorListeners(liveChatInput);
+				}
+				scheduleRunPromptEstimate();
+			});
+			promptComposerObserver.observe(document.body, { childList: true, subtree: true });
+		}
 
 		scheduleRunPromptEstimate();
-	}
-
-	// NEW: token estimate - rebinds the estimator if Claude re-renders the composer input.
-	function ensurePromptEstimatorAttached() {
-		const chatInput = document.querySelector(CC.DOM.CHAT_INPUT);
-		if (!chatInput) return;
-		if (chatInput === promptChatInput && document.contains(chatInput)) return;
-		attachPromptEstimatorListeners(chatInput);
 	}
 
 	async function handleUrlChange() {
@@ -323,7 +332,7 @@
 			if (el) ui.attachHeader();
 		});
 		waitForElement(CC.DOM.CHAT_INPUT, 60000).then((el) => {
-			if (el) attachPromptEstimatorListeners(el); // NEW: token estimate starts once the chat input exists
+			if (el) attachPromptEstimatorListeners(el); // NEW: wire up the prompt token estimator once the input exists
 		});
 
 		if (!currentConversationId) {
@@ -342,10 +351,6 @@
 
 	const unobserveUrl = observeUrlChanges(handleUrlChange);
 	window.addEventListener('beforeunload', unobserveUrl);
-
-	// NEW: token estimate - watches for composer re-renders so the listener survives sent messages.
-	promptInputObserver = new MutationObserver(ensurePromptEstimatorAttached);
-	promptInputObserver.observe(document.body, { childList: true, subtree: true });
 
 	// Refresh on branch navigation - watch for the branch indicator to change
 	let branchObserver = null;
